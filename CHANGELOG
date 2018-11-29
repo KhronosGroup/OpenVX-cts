@@ -1,0 +1,258 @@
+OpenVX conformance tests change log:
+
+RELEASE: CTS-1.2-20171220
+* Fixes for compiling with Windows Visual Studio
+
+RELEASE: CTS-1.2-20171020
+* First conformance test suite for OpenVX 1.2
+* Optional tests for Neural-Network and Import-Export KHR extensions
+
+RELEASE: CTS-1.1-20170301
+
+2017-02-15
+* Fixed an incorrect 'return' from a function returning a value
+* Include string.h in test_mem.c
+* Clean/clarify the dangling refs management
+2017-02-14
+* Remove include "vx_compatibility.h"
+* Make ownCopyImage static
+* Remove negative tests for vx_convolution object
+2017-01-27
+* 16202 - Added API in test_utils to get path to the test images
+2017-01-26
+* 16203 - Adding wrapper for malloc/free/memset
+* 16177 - Remove user kernel at end of take10_kernel in test_graph.c
+2017-01-24
+* 16116 - Replaced access/commit in test_array and test_vximage with copy or map/unmap
+2017-01-11
+* Replace controversial error code checking by a more generic error checking
+2016-12-20
+* 16160 - Fix Histogram.OnRandom/0/Immediate/U8 by writing the Distribution intead of reading it
+* VX_REF_ATTRIBUTE_<name> -> VX_REFERENCE_<name> change
+2016-12-08
+* 16146 - Fixed the ScaleImage/Bilinear conformance test
+2016-07-18
+* 15932 - Remove include of string.h from vx_types.h
+
+RELEASE: CTS-1.1-20160617
+
+2016-06-17
+* fixed conformance test build under cygwin
+2016-06-16
+* fixed build conformance test test-module as a package
+2016-06-15
+* fix warnings on windows build
+* Apply patch for fixing the pb with valid regions in pyramid tests
+2016-06-14
+* Change testRegisterAutoAging to check data content instead of references
+* Make concerto-built conformance-test-program-name match cmake and README
+* 15901 - excluded test for read-only VX_IMAGE_RANGE attribute
+* fix conformance test test_vximage
+* 15899 - fixed build of conformance tests with pre-built OpenVX libraries
+* 15896 - fix for Scalar conformance test
+* Doesn't check VX_DISTRIBUTION_WINDOW when it is specified as invalid (when the range is not a multiple of nbins)
+2016-06-10
+* 15887 - fixed test_vximage
+2016-06-03
+* 15780 - fixed VX_NOGAP_X use in vxMapLUT calls in tests
+2016-06-02
+* 15862 - fixed type of parameter in vxSetReferenceName test and sample impl
+* 15863 - fixed sobel3x3 kernel validator and conformance test
+* 15793 - fixed inclusion of extra files
+* 15867 - removed dev specific path
+* 15868 - fixed #if/else in vx_test.c
+2016-05-31
+* 15860 - fix setting of valid rectangle callback
+* 15793 - fix conformance test for vxUnloadKernels
+* fix compilation warning on windows and linux for concerto build
+2016-05-28
+* 15857 - apply patch to fix issues with C98 compiler
+* 15718 - remove overlooked line with negative test
+* deprecated funcs replaced with new ones for modules extra and debug
+2016-05-26
+* 15718 - redesign conformance test according to the latest specification
+* 13719 - fixed crash in Smoke test
+2016-05-20
+* 14615 - changed copyright date
+* 15791 - changed license notice
+* 13337 - new attribute and callback to manage user kernel valid rectangle
+* 12667 - graph and nodes status attributes
+* 14205 - fixed vxVerifyGraph semantic
+* 14351 - add smoke test for check required params
+* 14561 - fixed non settable attributes
+* 15793 - updated sample implementation and fixed test for vxUnloadKernels
+* 15670 - change all internal identifier' prefix from 'vx' to 'own'
+2016-05-13
+* 13797 - fix support for pyramids in the image processing functions
+* 12667 - Graph and Node status attributes do not reflect execution status
+* 14238 - Array of images and references support
+* 15222 - Add VX_CONTEXT_ENABLE_PERFORMANCE_COUNTERS attribute
+* 15806 - Graph conformance test checks operation of performance
+*         counters without first enabling them
+2016-05-06
+* 10584 - add vxCreateImageFromChannel and tests
+* 13198 - add vxSetReferenceName and conformance tests
+* 15618 - deprecated vxAccess/Commit funcs in tests
+* 15718 - conformance test fixed
+* 15803 - fixed test and vxMap/UnmapImagePatch funcs
+* fixed build warnings
+2016-04-29
+* sync with svn r32728
+* 13196 - add vxCopyArrayRange, vxMapArrayRange, vxUnmapArrayRange and tests
+* 13196 - add vxCopyLUT, vxMapLUT, vxUnmapLUT and tests
+* 13196 - add vxCopyMatrix, vxCopyConvolutionCoefficients,
+*         vxCopyScalar and tests
+* 13313 - improved test for auto aging delay
+* 13811 - fixed sample implementation and test for delay as an output param
+* 15618 - vxAccessImagePatch/vxCommitImagePatch and
+*         vxReadScalarValue/vxWriteScalarValue deprecated in conformance tests
+*         and test engine
+* 15758 - removed test for VX_KERNEL_INVALID
+2016-04-22
+* sync with svn r32696
+* fixed sampl build issues (sync sample with changed attributes name)
+* 13196 - add vxCopyImagePatch, vxMapImagePatch, vxUnmapImagePatch and tests
+*         add vxCopyDistribution, vxMapDistributionm vxUnmapDistribution
+*         and tests
+* 13016 - fixed test (order of vxRemoveKernel call)
+* 13821 - improved conformance test
+* 15744 - fixed vxSwapImageHandle test
+* 15743 - fixed ColorConvert sample impl and test
+* 15641 - fixed typo in vxMultiply test
+* 15706 - fixed vxLaplacianReconstruct test
+* 15650 - fixed sample impl and test (delay semantics)
+2016-04-15
+* sync with svn r32635 and restore codebase compilation
+* 12972 - ignore threshold TRUE and FALSE vals in vxCannyEdgeDetectorNode
+* 13399 - improve tests for vxSwapImageHandle
+* 13309 - add new func vxSetMetaFormatFromReference and tests
+* 14960 - change attribute names
+* 13016 - add new func vxUnloadKernels and tests
+* 14432 - consistent error management in getter funcs
+* 13200 - add new func vxNonlinearFilterNode and tests
+* 15291 - extended conformance test
+2016-03-30
+* sync with svn r32583 and restore codebase compilation
+* 14072 - the vxHint mechanism extended to allow arguments
+* 12431 - adopted new type vx_pixel_value_t
+* 14500 - removed attribute
+* 13422 - hint was removed
+* 14211 - canny tests extended for INT16 threshold
+* 14493 - canny tests extended for INT16 threshold
+* 11676 - check every vxAddReference for status
+* 15558 - fixed optical flow conformance test (zero stride)
+2016-03-17
+* sync with svn r32541 and restore codebase compilation
+* (changed sources to match changes in headers)
+* 11676  check every vxAddReference
+2016-01-14
+* 14019: fixed double call of vxReleaseGraph in Canny, HarrisCorners,
+*        GaussianPyramid, LaplacianPyramid, LaplacianReconstruct and
+*        HalfScaleGaussian kernels.
+*        Also sync cmake script for sample/vxu folder
+2015-12-25
+* 9600:  improved tests for vxSetNodeTarget, vxSetImmediateNodeTarget
+* 13338: fixed vxReleaseReference func for different reference types
+* 13399: improved tests for vxSwapImageHandle
+* 12652: fixed sobel dx kernels
+* 10847: fixed tests for vxLaplacianPyramid, vxLaplacianReconstruct
+2015-12-17
+* 9600:  add tests for vxSetNodeTarget and vxSetImmediateModeTarget
+* 15303: fixed rectangle in vxCommitImagePatch for MeanStdDev kernel
+* 13340: add test for image containment/overlapping relationship
+* 14019: fixed resource leaks at vxVerifyGraph for vxHalfScaleGaussianNode,
+*        vxHarrisCornersNode, vxCannyEdgeDetectorNode, vxGaussianPyramidNode,
+*        vxLaplacianPyramidNode, vxLaplacianReconstructNode
+2015-11-28
+* 15178: fixed type of convolution attributes
+* 15176: fixed too strong check in convolution input validator
+* 13797: implemented with creation of actual hidden nodes. No array of object support and no propagation of changes in parameters or attributes.
+*        implemented support for replicate add/sub/mul/lut nodes.
+*        remove reference to object arrays in func description (support of object arrays not implemented yet)
+*        fixed warnings 'passing argument from incompatible pointer type'
+* 13725: implemented unsupported border mode policy
+* 12972: restored default value 255 for vx_true_e
+* 10847: replace 16x16 size with 128x128 for laplacian reconstruct immediate mode
+*        remove 16x16 size from test (too small for laplacian pyramid with 5x5 filter kernel)
+*        fixed undefined border bounds computation in test
+*        add VX_API_CALL to vxLaplacianReconstructNode impl
+*        add missed VX_API_CALL for vxLaplacianReconstructNode func
+*        fixed vxRegisterAutoAging declaration. fixed roi computation for laplacian pyramid tests
+*        fix comparison of ref and tst images (exclude border pixels because of undfined border mode)
+*        fixed typo after hand-merge of conflicts
+*        added setNodeTarget calls to 2 new vxu functions
+*        extended laplacian pyramid bitdepth from U8 to S16 to avoid overflows. this also involved add S16 support to vxScaleImage function (as not documented feature of sample implementation)
+*        add vxLaplacianReconstructNode, vxuLaplacianReconstruct and tests
+*        add vxLaplacianPyramidNode, vxuLaplacianPyramid functions and tests
+* 9600:  implemented node affinity capability feature
+*        fix build of vxu.dll
+*        clean sources
+2015-11-13
+* 14654: implemented new user-kernel validation callback
+*        fixed typo in comment
+*        fixed explicit checks for function return value
+* 13932: added kernel_size=1 to HalfScaleGaussian
+* 13399: add vxSwapImageHandle and test. also fixed compilation warning in histogram test.
+*        fixed typo
+*        strenghten bad params check
+* 13338: improved SmokeTest.vxReleaseReference test
+* 13197: added SmokeTest.vxRetainReference test
+2015-10-29:
+* 14733: changed SobelMxN output to F32 to get rid of 7x7 overflow, enabled HarrisCorners GRADIENT_SIZE=7 tests
+* 14439: implemented a note #2 on vxCreateImageFromHandle:
+*        2- In the vx_imagepatch_addressing_t structures of the 'addr[]' parameter
+*          2.1- Only dim_x, dim_y, stride_x and stride_y fields must be provided by the application. Other fields (step_x, step_y, scale_x & scale_y) are ignored by the vxCreateImageFromHandle function.
+*          2.2- the layout of the imported memory must follow a row-major order. In other words, stride_x should be sufficiently large so that there is no overlap between data elements corresponding to different pixels, and stride_y >= stride_x * dim_x.
+* 14193: vxCreateImageFromHandle - added const keyword
+* 13795: added support for VX_TYPE_INT16, LUT non-zero offset; added S16 tests
+* 13338: add vxReleaseReference func and smoke test
+* 13313: add vxRegisterAutoAging func and simple test
+* 13197: implemented vxRetainReference function
+* 12972: threshold, canny kernels and conformance tests changed to use attributes TRUE_VALUE and FALSE_VALUE
+2015-10-13:
+* 14830: changed accumulation of result - int32 to uint32, as proposed in bug description
+* 14298: added VX_VERSION changes made in 14823
+*        provided backward compatibility with 1.0 (vx_khr_opencl.h)
+*        implemented semantics of the 'new' histogram formula - see 14298, 12483, 14342
+* 13812: implemented vxSetMetaFormatFromReference func
+2015-09-29:
+* 14109: improvements in HarrisCorners conformance tests
+* 14652: fixed vxHint to accept all openvx data object types
+* 14649: fixed wrong parameter check in UserNode.Simple test
+* 14793: fixed typo in vx_threshold_t members description 
+2015-09-16:
+* 14037: clarified ambiguity of "disabled" test in conformance test log
+* 14067: fixed missing vxReleaseKernel after vxFinalizeNode in test_usernode.c
+* 13911: removed references to sample implementation examples in public header
+         files
+* 13400: replace VX_ID_KHRONOS with VX_ID_DEFAULT in example
+* 13398: change the type of num_corners in vxFastCorners
+* 12567: add initialization for unused fields of vx_keypoint_t data structure
+* 14112: tighten RGB/YUV conversion conformance
+* 13856: fixed signed/unsigned mismatch in vxEuclideanNonMaxSuppression
+
+2015-05-13:
+* updated vx_uint32/vx_size type policy
+* updated kernel names
+* removed GraphCallback.testRestart test
+* AccumulateSquare: S16 input without negative values
+* Dilate/Erode: boolean images with 0/255 values
+
+2015-04-15:
+* added Array tests
+* added Image CopyWrite/CopyRead tests
+* added AbsDiff S16 tests
+* Scale image test: replaced exact check from some tests
+* HarrisCorners test uses normalization
+
+2014-12-19:
+* fix OpticalFlow check for lost points
+
+2014-12-17:
+* removed Scale tests with BILINEAR interpolation and bit-exact checks
+* fix tolerance check in GaussianPyramid tests
+* tests for OpticalFlow with pre-calculated reference input pyramids
+
+2014-12-08:
+* disabled tests for REPLICATE and CONSTANT borders for filter tests
+* added tests package version information to #REPORT string
