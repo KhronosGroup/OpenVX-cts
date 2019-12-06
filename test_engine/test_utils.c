@@ -17,6 +17,13 @@
 
 #include <math.h>
 #include <string.h>
+
+#if defined (_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "test.h"
 
 // As for OpenVX 1.0 both of following defines result in udefined behavior:
@@ -265,7 +272,15 @@ void ct_fill_image_random_impl(vx_image image, uint64_t* seed, const char* func,
     }
 
         status = VX_SUCCESS;
-        if (format == VX_DF_IMAGE_U8) // 1 plane of 8-bit data
+        if (format == VX_DF_IMAGE_U1)      // 1 plane of 1-bit data
+            SET_PIXELS(vx_uint8,
+            {
+                vx_uint8 offset = x % 8;
+                vx_uint8 mask = 1 << offset;
+                vx_uint8 rng_val = (vx_uint8)CT_RNG_NEXT_INT(rng, 0, 2) << offset;
+                data[0] = (data[0] & ~mask) | rng_val;
+            })
+        else if (format == VX_DF_IMAGE_U8) // 1 plane of 8-bit data
             SET_PIXELS(vx_uint8,
             {
                 data[0] = (vx_uint8)CT_RNG_NEXT(rng);
@@ -519,6 +534,7 @@ vx_image ct_clone_image_impl(vx_image image, vx_graph graph, const char* func, c
             vx_uint32 elem_sz = 0;
             switch(format)
             {
+                case VX_DF_IMAGE_U1:
                 case VX_DF_IMAGE_U8:
                 case VX_DF_IMAGE_YUV4:
                 case VX_DF_IMAGE_IYUV:
@@ -584,14 +600,37 @@ vx_image ct_clone_image_impl(vx_image image, vx_graph graph, const char* func, c
 
                 for (x = 0; x < w; x++)
                 {
-                    int i_src = x * addr_src.stride_x * addr_src.step_x * addr_src.scale_x / VX_SCALE_UNITY;
-                    int i_dst = x * addr_dst.stride_x * addr_dst.step_x * addr_dst.scale_x / VX_SCALE_UNITY;
+                    int i_src, i_dst, src_offset = 0, dst_offset = 0;
+                    if (format == VX_DF_IMAGE_U1)
+                    {
+                        int x_bits_src = x * addr_src.stride_x_bits * addr_src.step_x * addr_src.scale_x / VX_SCALE_UNITY;
+                        int x_bits_dst = x * addr_dst.stride_x_bits * addr_dst.step_x * addr_dst.scale_x / VX_SCALE_UNITY;
+                        i_src = x_bits_src / 8;
+                        i_dst = x_bits_dst / 8;
+                        src_offset = x_bits_src % 8;
+                        dst_offset = x_bits_dst % 8;
+                    }
+                    else
+                    {
+                        i_src = x * addr_src.stride_x * addr_src.step_x * addr_src.scale_x / VX_SCALE_UNITY;
+                        i_dst = x * addr_dst.stride_x * addr_dst.step_x * addr_dst.scale_x / VX_SCALE_UNITY;
+                    }
 
                     vx_uint8 *psrc = (vx_uint8*)(((vx_uint8 *)base_ptr_src) + j_src + i_src);
                     vx_uint8 *pdst = (vx_uint8*)(((vx_uint8 *)base_ptr_dst) + j_dst + i_dst);
 
                     for(k = 0; k < elem_sz; ++k)
-                        pdst[k] = psrc[k];
+                    {
+                        if (format == VX_DF_IMAGE_U1)
+                        {
+                            vx_uint8 src_val = (psrc[k] & (1 << src_offset)) >> src_offset;
+                            pdst[k] = (pdst[k] & ~(1 << dst_offset)) | (src_val << dst_offset);  // Set target pixel
+                        }
+                        else
+                        {
+                            pdst[k] = psrc[k];
+                        }
+                    }
                 }
             }
 
@@ -782,10 +821,19 @@ uint32_t ct_floor_u32_no_overflow(float v)
     return (uint32_t)(v);
 }
 
+// Integer division with rounding towards minus infinity
+int ct_div_floor(int x, int y) {
+    int q = x / y;
+    int r = x % y;
+    if ( (r != 0) && ((r < 0) != (y < 0)) )
+        --q;
+    return q;
+}
+
 uint8_t ct_clamp_8u(int32_t v)
 {
     if (v >= 255)
-        return v;
+        return 255;
     if (v <= 0)
         return 0;
     return (uint8_t)v;
@@ -1000,13 +1048,22 @@ void ct_destroy_vx_context(void **pContext)
     *pContext = NULL;
 }
 
-char *ct_get_test_file_path()
+const char *ct_get_test_file_path()
 {
-    char *env = getenv("VX_TEST_DATA_PATH");
+    const char *env = getenv("VX_TEST_DATA_PATH");
     if (env == NULL)
     {
         /* Look in the current directory */
-        env = ".";
+        return ".";
     }
     return env;
+}
+
+void ct_delay_ms(uint32_t ms)
+{
+#if defined (_WIN32)
+    Sleep(ms);
+#else
+    usleep(ms * 1000);
+#endif
 }

@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 #include "test_engine/test.h"
 #include <VX/vx.h>
@@ -192,3 +194,5 @@ TEST_WITH_ARG(Integral, testImmediateProcessing, Arg,
 }
 
 TESTCASE_TESTS(Integral, testNodeCreation, testGraphProcessing, testImmediateProcessing)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

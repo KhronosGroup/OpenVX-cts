@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <VX/vx.h>
 #include <VX/vxu.h>
 
@@ -75,7 +77,7 @@ static vx_reference own_create_exemplar(vx_context context, vx_enum item_type)
             exemplar = (vx_reference)vxCreateLUT(context, obj_item_type, lut_num_items);
             break;
         case VX_TYPE_THRESHOLD:
-            exemplar = (vx_reference)vxCreateThreshold(context, thresh_type, obj_item_type);
+            exemplar = (vx_reference)vxCreateThresholdForImage(context, thresh_type, format, format);
             break;
         default:
             break;
@@ -318,6 +320,75 @@ TEST_WITH_ARG(ObjectArray, test_vxCreateObjectArray, Obj_Array_Arg, PARAMETERS)
     ASSERT(object_array == 0);
 }
 
+#define ADD_VX_VIRTUAL_OBJECT_ARRAY_TYPES(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_TYPE_IMAGE", __VA_ARGS__, VX_TYPE_IMAGE)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_TYPE_ARRAY", __VA_ARGS__, VX_TYPE_ARRAY)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_TYPE_PYRAMID", __VA_ARGS__, VX_TYPE_PYRAMID))
+
+#define VIRTUAL_OBJECT_ARRAY_PARAMETERS \
+    CT_GENERATE_PARAMETERS("object_array", ADD_VX_VIRTUAL_OBJECT_ARRAY_TYPES, ARG, NULL)
+
+
+TEST_WITH_ARG(ObjectArray, test_vxCreateVirtualObjectArray, Obj_Array_Arg,
+              VIRTUAL_OBJECT_ARRAY_PARAMETERS)
+{
+    vx_context context = context_->vx_context_;
+
+    vx_reference exemplar = NULL;
+    vx_size num_items = OBJECT_ARRAY_NUM_ITEMS;
+    vx_enum item_type = arg_->item_type;
+
+    vx_graph graph = 0;
+    vx_object_array object_array = 0;
+
+    vx_reference actual_item = NULL;
+    vx_enum actual_type = VX_TYPE_INVALID;
+    vx_size actual_num_items = 0;
+
+    vx_uint32 i;
+
+    ASSERT_VX_OBJECT(exemplar = own_create_exemplar(context, item_type), (enum vx_type_e)item_type);
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    /* 1. check if object array can be created with allowed types*/
+    ASSERT_VX_OBJECT(object_array = vxCreateVirtualObjectArray(graph, exemplar, num_items), VX_TYPE_OBJECT_ARRAY);
+
+    /* 2. check if object array's actual item_type corresponds to requested item_type */
+    VX_CALL(vxQueryObjectArray(object_array, VX_OBJECT_ARRAY_ITEMTYPE, &actual_type, sizeof(actual_type)));
+    ASSERT_EQ_INT(item_type, actual_type);
+
+    /* 3. check if object array's actual item_size corresponds to requested item_type size */
+    VX_CALL(vxQueryObjectArray(object_array, VX_OBJECT_ARRAY_NUMITEMS, &actual_num_items, sizeof(actual_num_items)));
+    ASSERT_EQ_INT(num_items, actual_num_items);
+
+    /* 4. check meta formats of objects in object array */
+    for (i = 0u; i < num_items; i++)
+    {
+        ASSERT_VX_OBJECT(actual_item = vxGetObjectArrayItem(object_array, i), (enum vx_type_e)item_type);
+
+        ASSERT_NO_FAILURE(own_check_meta(actual_item, exemplar));
+
+        VX_CALL(vxReleaseReference(&actual_item));
+        ASSERT(actual_item == 0);
+    }
+
+    /* 5. check that we can't get item out of object array's range */
+    actual_item = vxGetObjectArrayItem(object_array, (vx_uint32)num_items);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)actual_item));
+
+    VX_CALL(vxReleaseReference(&exemplar));
+    ASSERT(exemplar == 0);
+
+    VX_CALL(vxReleaseObjectArray(&object_array));
+    ASSERT(object_array == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    ASSERT(graph == 0);
+}
+
 TESTCASE_TESTS(
     ObjectArray,
-    test_vxCreateObjectArray)
+    test_vxCreateObjectArray,
+    test_vxCreateVirtualObjectArray)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

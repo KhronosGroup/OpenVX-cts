@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <math.h>
 #include <string.h>
 #include <VX/vx.h>
 #include <VX/vxu.h>
 
 #include "test_engine/test.h"
-#include "shared_functions.h"
 
 #define VX_GAUSSIAN_PYRAMID_TOLERANCE 1
 
 TESTCASE(LaplacianPyramid, CT_VXContext, ct_setup_vx_context, 0)
-
 
 TEST(LaplacianPyramid, testNodeCreation)
 {
@@ -416,6 +416,9 @@ vx_status convolve(vx_image src, vx_convolution conv, vx_image dst, vx_border_t 
     vx_status status = VX_SUCCESS;
     vx_int32 low_x, low_y, high_x, high_y;
 
+    vx_map_id src_map_id;
+    vx_map_id dst_map_id;
+
     status |= vxQueryImage(src, VX_IMAGE_FORMAT, &src_format, sizeof(src_format));
     status |= vxQueryImage(dst, VX_IMAGE_FORMAT, &dst_format, sizeof(dst_format));
     status |= vxQueryConvolution(conv, VX_CONVOLUTION_COLUMNS, &conv_width, sizeof(conv_width));
@@ -425,8 +428,10 @@ vx_status convolve(vx_image src, vx_convolution conv, vx_image dst, vx_border_t 
     conv_radius_y = (vx_int32)conv_height / 2;
     status |= vxCopyConvolutionCoefficients(conv, conv_mat, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
     status |= vxGetValidRegionImage(src, &rect);
-    status |= vxAccessImagePatch(src, &rect, 0, &src_addr, &src_base, VX_READ_ONLY);
-    status |= vxAccessImagePatch(dst, &rect, 0, &dst_addr, &dst_base, VX_WRITE_ONLY);
+    status |= vxMapImagePatch(src, &rect, 0, &src_map_id, &src_addr, (void **)&src_base,
+                              VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0);
+    status |= vxMapImagePatch(dst, &rect, 0, &dst_map_id, &dst_addr, (void **)&dst_base,
+                              VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0);
 
     low_x = 0;
     high_x = src_addr.dim_x;
@@ -515,8 +520,8 @@ vx_status convolve(vx_image src, vx_convolution conv, vx_image dst, vx_border_t 
         }
     }
 
-    status |= vxCommitImagePatch(src, NULL, 0, &src_addr, src_base);
-    status |= vxCommitImagePatch(dst, &rect, 0, &dst_addr, dst_base);
+    status |= vxUnmapImagePatch(src, src_map_id);
+    status |= vxUnmapImagePatch(dst, dst_map_id);
 
     return status;
 }
@@ -636,7 +641,7 @@ static void own_laplacian_pyramid_reference(vx_context context, vx_border_t bord
     vx_convolution conv = 0;
 
     border.mode = VX_BORDER_REPLICATE;
-    
+
     VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
 
     VX_CALL(vxQueryPyramid(laplacian, VX_PYRAMID_LEVELS, &levels, sizeof(levels)));
@@ -862,9 +867,9 @@ TEST_WITH_ARG(LaplacianPyramid, testImmediateProcessing, Arg, LAPLACIAN_PYRAMID_
     }
 
     own_laplacian_pyramid_reference(context, border, src, ref_pyr, ref_dst);
-    
+
     border.mode = VX_BORDER_REPLICATE;
-    
+
     VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
     VX_CALL(vxuLaplacianPyramid(context, src, tst_pyr, tst_dst));
 
@@ -1198,3 +1203,5 @@ TESTCASE_TESTS(LaplacianReconstruct,
     testGraphProcessing,
     testImmediateProcessing
 )
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

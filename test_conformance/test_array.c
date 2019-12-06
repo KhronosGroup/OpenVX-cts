@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <math.h>
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -872,3 +874,5 @@ TESTCASE_TESTS(
     test_vxCopyArrayRangeRead,
     test_vxCopyArrayRangeWrite,
     test_vxMapArrayRangeWrite)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

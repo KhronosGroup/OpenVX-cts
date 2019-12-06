@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_USE_ENHANCED_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -219,3 +221,5 @@ TEST_WITH_ARG(MatchTemplate,  testImmediateProcessing, method_type_arg,
     ASSERT(vx_result_image == 0);}
 
 TESTCASE_TESTS(MatchTemplate, testNodeCreation, testGraphProcessing, testImmediateProcessing)
+
+#endif //OPENVX_USE_ENHANCED_VISION

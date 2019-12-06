@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -79,6 +79,15 @@ CT_Image ct_get_image_roi(CT_Image img, CT_Rect roi);
 CT_Image ct_get_image_roi_(CT_Image img, uint32_t x_start, uint32_t y_start, uint32_t width, uint32_t height);
 void ct_adjust_roi(CT_Image img, int left, int top, int right, int bottom);
 
+uint8_t* ct_image_data_ptr_1u(CT_Image image, uint32_t x, uint32_t y);
+#define CT_IMAGE_DATA_PTR_1U(image, x, y) ct_image_data_ptr_1u(image, x, y)
+
+uint8_t ct_image_data_replicate_1u(CT_Image image, int32_t x, int32_t y);
+#define CT_IMAGE_DATA_REPLICATE_1U(image, x, y) ct_image_data_replicate_1u(image, x, y)
+
+uint8_t ct_image_data_constant_1u(CT_Image image, int32_t x, int32_t y, vx_bool constant_value);
+#define CT_IMAGE_DATA_CONSTANT_1U(image, x, y, constant_value) ct_image_data_constant_1u(image, x, y, constant_value)
+
 #if 1
 #define CT_IMAGE_DATA_PTR_8U(image, x, y_) &(image)->data.y[(y_) * (image)->stride + (x)]
 #else
@@ -100,6 +109,23 @@ uint8_t ct_image_data_constant_8u(CT_Image image, int32_t x, int32_t y, vx_uint3
 #define CT_IMAGE_DATA_PTR_RGBX(image, x, y) &(image)->data.rgbx[(y) * (image)->stride + (x)]
 
 
+#define CT_FILL_IMAGE_1U(ret_error, image, op) \
+    ASSERT_(ret_error, image != NULL); \
+    ASSERT_(ret_error, image->format == VX_DF_IMAGE_U1); \
+    ASSERT_(ret_error, image->width > 0); \
+    ASSERT_(ret_error, image->height > 0); \
+    { \
+        uint32_t x, y; \
+        for (y = 0; y < image->height; y++) { \
+            for (x = 0; x < image->width; x++) { \
+                uint32_t xShftd = x + image->roi.x % 8; /* x respecting start of ROI in first byte */ \
+                uint8_t  offset = xShftd % 8; (void)offset; \
+                uint8_t* dst_data = CT_IMAGE_DATA_PTR_1U(image, xShftd, y); (void)dst_data; \
+                op; \
+            } \
+        } \
+    }
+
 #define CT_FILL_IMAGE_8U(ret_error, image, op) \
     ASSERT_(ret_error, image != NULL); \
     ASSERT_(ret_error, image->format == VX_DF_IMAGE_U8); \
@@ -114,7 +140,6 @@ uint8_t ct_image_data_constant_8u(CT_Image image, int32_t x, int32_t y, vx_uint3
             } \
         } \
     }
-
 
 #define CT_FILL_IMAGE_16S(ret_error, image, op) \
     ASSERT_(ret_error, image != NULL); \
@@ -160,6 +185,12 @@ void *ct_image_copy_impl(CT_Image ctimg, vx_image vximg, CT_ImageCopyDirection d
 
 #define ct_image_copyto_vx_image(vximg, ctimg) ct_image_copy_impl(ctimg, vximg, COPY_CT_IMAGE_TO_VX_IMAGE, __FUNCTION__, __FILE__, __LINE__)
 #define ct_image_copyfrom_vx_image(ctimg, vximg) ct_image_copy_impl(ctimg, vximg, COPY_VX_IMAGE_TO_CT_IMAGE, __FUNCTION__, __FILE__, __LINE__)
+
+void U8_ct_image_to_U1_ct_image(CT_Image img_in, CT_Image img_out);
+
+void U1_ct_image_to_U8_ct_image(CT_Image img_in, CT_Image img_out);
+
+void threshold_U8_ct_image(CT_Image img, uint8_t thresh);
 
 #define EXPECT_EQ_CTIMAGE(expected, actual) ct_assert_eq_ctimage_impl(expected, actual, 0, (uint32_t)-1, #expected, #actual, __FUNCTION__, __FILE__, __LINE__)
 #define ASSERT_EQ_CTIMAGE(expected, actual)                                                                                     \

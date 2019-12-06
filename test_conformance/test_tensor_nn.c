@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
 #ifdef OPENVX_USE_NN
 
 #include "test_tensor_util.h"
@@ -138,7 +139,7 @@ static void ownConvolution(
 
             sum = ownLoadValueAsRawInt(fmt, (char *)bias_ptr + bias_byte_offset);
         }
-        
+
         const size_t xx = x * stride_x;
         const size_t yy = y * stride_y;
 
@@ -282,9 +283,9 @@ TEST_WITH_ARG(TensorNN, testConvolutionLayer, test_convolution_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     const size_t inout_dim_num = 3 + arg_->batching_dim;
@@ -391,11 +392,11 @@ TEST_WITH_ARG(TensorNN, testConvolutionLayer, test_convolution_layer_arg,
         const size_t weight_count = weight_bytes / sizeof_data_type;
         const size_t bias_count = bias_bytes / sizeof_data_type;
 
-        void * const in = malloc(in_bytes);
-        void * const weight = malloc(weight_bytes);
-        void * const bias = bias_dim_num ? malloc(bias_bytes) : NULL;
-        void * const out = malloc(out_bytes);
-        void * const refs = malloc(out_bytes);
+        void * const in = ct_alloc_mem(in_bytes);
+        void * const weight = ct_alloc_mem(weight_bytes);
+        void * const bias = bias_dim_num ? ct_alloc_mem(bias_bytes) : NULL;
+        void * const out = ct_alloc_mem(out_bytes);
+        void * const refs = ct_alloc_mem(out_bytes);
         ASSERT(in && weight && (!bias_count || bias) && out && refs);
 
         {
@@ -489,11 +490,11 @@ TEST_WITH_ARG(TensorNN, testConvolutionLayer, test_convolution_layer_arg,
         EXPECT_EQ_PTR(NULL, bias_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(weight);
-        free(bias);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(weight);
+        ct_free_mem(bias);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -696,9 +697,9 @@ TEST_WITH_ARG(TensorNN, testFullyConnectedLayer, test_fully_connected_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     const size_t in_dim_num = arg_->core_dim + arg_->batch_dim;
@@ -719,7 +720,7 @@ TEST_WITH_ARG(TensorNN, testFullyConnectedLayer, test_fully_connected_layer_arg,
         vx_size bias_dims[1];
         vx_size out_dims[4];
         {
-            for (size_t i = 0; i < in_dim_num; ++i) 
+            for (size_t i = 0; i < in_dim_num; ++i)
             {
                 in_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
             }
@@ -744,7 +745,7 @@ TEST_WITH_ARG(TensorNN, testFullyConnectedLayer, test_fully_connected_layer_arg,
                 weight_dims[0] = in_dims[0];
                 weight_dims[1] = in_dims[1];
                 weight_dims[2] = in_dims[2];
-            } 
+            }
 
             if (bias_dim_num) bias_dims[0] = out_dims[0];
         }
@@ -780,11 +781,11 @@ TEST_WITH_ARG(TensorNN, testFullyConnectedLayer, test_fully_connected_layer_arg,
         const size_t weight_count = bias_bytes / sizeof_data_type;
         const size_t bias_count = bias_bytes / sizeof_data_type;
 
-        void * const in = malloc(in_bytes);
-        void * const weight = malloc(weight_bytes);
-        void * const bias = bias_dim_num ? malloc(bias_bytes) : NULL;
-        void * const out = malloc(out_bytes);
-        void * const refs = malloc(out_bytes);
+        void * const in = ct_alloc_mem(in_bytes);
+        void * const weight = ct_alloc_mem(weight_bytes);
+        void * const bias = bias_dim_num ? ct_alloc_mem(bias_bytes) : NULL;
+        void * const out = ct_alloc_mem(out_bytes);
+        void * const refs = ct_alloc_mem(out_bytes);
         ASSERT(in && weight && (!bias_dim_num || bias) && out && refs);
 
         vx_tensor in_tensor = vxCreateTensor(context_->vx_context_, in_dim_num, in_dims, data_type, fixed_point_position);
@@ -892,11 +893,11 @@ TEST_WITH_ARG(TensorNN, testFullyConnectedLayer, test_fully_connected_layer_arg,
         EXPECT_EQ_PTR(NULL, bias_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(weight);
-        free(bias);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(weight);
+        ct_free_mem(bias);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -1056,9 +1057,9 @@ TEST_WITH_ARG(TensorNN, testPoolingLayer, test_pooling_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     const size_t dim_num = 3 + arg_->batching_dim;
@@ -1111,9 +1112,9 @@ TEST_WITH_ARG(TensorNN, testPoolingLayer, test_pooling_layer_arg,
 
         const size_t in_count = in_bytes / sizeof_data_type;
 
-        void * const in = malloc(in_bytes);
-        void * const out = malloc(out_bytes);
-        void * const refs = malloc(out_bytes);
+        void * const in = ct_alloc_mem(in_bytes);
+        void * const out = ct_alloc_mem(out_bytes);
+        void * const refs = ct_alloc_mem(out_bytes);
         ASSERT(in && out && refs);
 
         vx_tensor in_tensor = vxCreateTensor(context_->vx_context_, dim_num, in_dims, data_type, fixed_point_position);
@@ -1124,7 +1125,7 @@ TEST_WITH_ARG(TensorNN, testPoolingLayer, test_pooling_layer_arg,
         {
             // No real need to fo ownFillSmallRandData here because of the
             // guranteed 32bit accum and our data counts being small.
-            ownFillRandData(arg_->fmt, &rng, in_count, in); 
+            ownFillRandData(arg_->fmt, &rng, in_count, in);
 
             const vx_size view_start[4] = { 0 };
             VX_CALL(vxCopyTensorPatch(in_tensor, dim_num, view_start, in_dims, in_strides, in, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
@@ -1195,9 +1196,9 @@ TEST_WITH_ARG(TensorNN, testPoolingLayer, test_pooling_layer_arg,
         EXPECT_EQ_PTR(NULL, in_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -1215,7 +1216,7 @@ static void ownSoftmax(
 {
 //TODO: @Tomer, should we allow extra batch dims beyond 4? conv and poll have upto 3 of them! if not we can just discard this define and its usage
 #define SOFTMAX_ALLOW_EXTRA_DIMS
-    
+
 #ifdef SOFTMAX_ALLOW_EXTRA_DIMS
     assert(input.dim_num >= 1 && input.dim_num <= 4);
 #else
@@ -1234,7 +1235,7 @@ static void ownSoftmax(
 
     size_t key_sz = 0;
     size_t key_in_stride = 0;
-    
+
 #ifdef SOFTMAX_ALLOW_EXTRA_DIMS
     size_t batch_sz[5] = { 1, 1, 1, 1, 1 };
     size_t batch_in_strides[5] = { 0 };
@@ -1392,7 +1393,7 @@ static void ownSoftmax(
 
             max_val = MAX(max_val, in_val);
         }
-        
+
         // Note: It may be benificial to cache the exponents
         for (size_t i = 0; i < key_sz; ++i)
         {
@@ -1446,7 +1447,7 @@ TEST_WITH_ARG(TensorNN, testSoftmaxLayer, test_softmax_layer_arg,
     {   // TODO: ownTestGetMaxDims() ?
         vx_size max_dims = 0;
         VX_CALL(vxQueryContext(context_->vx_context_, VX_CONTEXT_MAX_TENSOR_DIMS, &max_dims, sizeof(max_dims)));
-        ASSERT(max_dims >= arg_->dim_num); 
+        ASSERT(max_dims >= arg_->dim_num);
     }
 
     uint64_t rng;
@@ -1456,9 +1457,9 @@ TEST_WITH_ARG(TensorNN, testSoftmaxLayer, test_softmax_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     for (int iter = 0; iter < TEST_TENSOR_NUM_ITERATIONS; ++iter)
@@ -1488,9 +1489,9 @@ TEST_WITH_ARG(TensorNN, testSoftmaxLayer, test_softmax_layer_arg,
         const size_t bytes = dims[arg_->dim_num-1] * strides[arg_->dim_num-1];
         const size_t count = bytes / sizeof_data_type;
 
-        void * const in = malloc(bytes);
-        void * const out = malloc(bytes);
-        void * const refs = malloc(bytes);
+        void * const in = ct_alloc_mem(bytes);
+        void * const out = ct_alloc_mem(bytes);
+        void * const refs = ct_alloc_mem(bytes);
         ASSERT(in && out && refs);
 
         vx_tensor in_tensor = vxCreateTensor(context_->vx_context_, arg_->dim_num, dims, data_type, fixed_point_position);
@@ -1501,7 +1502,7 @@ TEST_WITH_ARG(TensorNN, testSoftmaxLayer, test_softmax_layer_arg,
         {
             // No real need to fo ownFillSmallRandData here because of the
             // guranteed 32bit accum and our data counts being small.
-            ownFillRandData(arg_->fmt, &rng, count, in); 
+            ownFillRandData(arg_->fmt, &rng, count, in);
 
             const vx_size view_start[4] = { 0 };
             VX_CALL(vxCopyTensorPatch(in_tensor, arg_->dim_num, view_start, dims, strides, in, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
@@ -1558,9 +1559,9 @@ TEST_WITH_ARG(TensorNN, testSoftmaxLayer, test_softmax_layer_arg,
         EXPECT_EQ_PTR(NULL, in_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -1609,7 +1610,7 @@ static void ownActivation(
             func == VX_NN_ACTIVATION_SQUARE ||
             func == VX_NN_ACTIVATION_SQRT ||
             func == VX_NN_ACTIVATION_LINEAR);
-    
+
     assert (input.dim_num == output.dim_num);
     assert (input.dim_num > 0 && input.dim_num <= 4);
 
@@ -1746,7 +1747,7 @@ TEST_WITH_ARG(TensorNN, testActivationLayer, test_activation_layer_arg,
     {   // TODO: ownTestGetMaxDims() ?
         vx_size max_dims = 0;
         VX_CALL(vxQueryContext(context_->vx_context_, VX_CONTEXT_MAX_TENSOR_DIMS, &max_dims, sizeof(max_dims)));
-        ASSERT(max_dims >= arg_->dim_num); 
+        ASSERT(max_dims >= arg_->dim_num);
     }
 
     uint64_t rng;
@@ -1756,9 +1757,9 @@ TEST_WITH_ARG(TensorNN, testActivationLayer, test_activation_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     for (int iter = 0; iter < TEST_TENSOR_NUM_ITERATIONS; ++iter)
@@ -1788,9 +1789,9 @@ TEST_WITH_ARG(TensorNN, testActivationLayer, test_activation_layer_arg,
         const size_t bytes = dims[arg_->dim_num-1] * strides[arg_->dim_num-1];
         const size_t count = bytes / sizeof_data_type;
 
-        void * const in = malloc(bytes);
-        void * const out = malloc(bytes);
-        void * const refs = malloc(bytes);
+        void * const in = ct_alloc_mem(bytes);
+        void * const out = ct_alloc_mem(bytes);
+        void * const refs = ct_alloc_mem(bytes);
         ASSERT(in && out && refs);
 
         vx_tensor in_tensor = vxCreateTensor(context_->vx_context_, arg_->dim_num, dims, data_type, fixed_point_position);
@@ -1799,7 +1800,7 @@ TEST_WITH_ARG(TensorNN, testActivationLayer, test_activation_layer_arg,
         ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
 
         {
-            ownFillRandData(arg_->fmt, &rng, count, in); 
+            ownFillRandData(arg_->fmt, &rng, count, in);
 
             const vx_size view_start[4] = { 0 };
             VX_CALL(vxCopyTensorPatch(in_tensor, arg_->dim_num, view_start, dims, strides, in, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
@@ -1857,9 +1858,9 @@ TEST_WITH_ARG(TensorNN, testActivationLayer, test_activation_layer_arg,
         EXPECT_EQ_PTR(NULL, in_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -2011,23 +2012,23 @@ TEST_WITH_ARG(TensorNN, testROIPoolingLayer, test_roi_pooling_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     const size_t data_dim_num = arg_->with_batching ? 4 : 3;
     const size_t rois_dim_num = arg_->with_batching ? 3 : 2;
     const size_t out_dim_num = arg_->with_batching ? 5 : 4;
 
-    size_t * const data_dims = malloc(sizeof(*data_dims) * data_dim_num);
-    size_t * const rois_dims = malloc(sizeof(*rois_dims) * rois_dim_num);
-    size_t * const out_dims = malloc(sizeof(*out_dims) * out_dim_num);
+    size_t * const data_dims = ct_alloc_mem(sizeof(*data_dims) * data_dim_num);
+    size_t * const rois_dims = ct_alloc_mem(sizeof(*rois_dims) * rois_dim_num);
+    size_t * const out_dims = ct_alloc_mem(sizeof(*out_dims) * out_dim_num);
     ASSERT(data_dims && rois_dims && out_dims);
-    
-    size_t * const data_strides = malloc(sizeof(*data_strides) * data_dim_num);
-    size_t * const rois_strides = malloc(sizeof(*rois_strides) * rois_dim_num);
-    size_t * const out_strides = malloc(sizeof(*out_strides) * out_dim_num);
+
+    size_t * const data_strides = ct_alloc_mem(sizeof(*data_strides) * data_dim_num);
+    size_t * const rois_strides = ct_alloc_mem(sizeof(*rois_strides) * rois_dim_num);
+    size_t * const out_strides = ct_alloc_mem(sizeof(*out_strides) * out_dim_num);
     ASSERT(data_strides && rois_strides && out_strides);
 
     for (int iter = 0; iter < TEST_TENSOR_NUM_ITERATIONS; ++iter)
@@ -2088,10 +2089,10 @@ TEST_WITH_ARG(TensorNN, testROIPoolingLayer, test_roi_pooling_arg,
 
         const size_t data_count = data_bytes / sizeof_data_type;
 
-        void * const data = malloc(data_bytes);
-        void * const rois = malloc(rois_bytes);
-        void * const out = malloc(out_bytes);
-        void * const refs = malloc(out_bytes);
+        void * const data = ct_alloc_mem(data_bytes);
+        void * const rois = ct_alloc_mem(rois_bytes);
+        void * const out = ct_alloc_mem(out_bytes);
+        void * const refs = ct_alloc_mem(out_bytes);
         ASSERT(data && rois && out && refs);
 
         {
@@ -2188,19 +2189,19 @@ TEST_WITH_ARG(TensorNN, testROIPoolingLayer, test_roi_pooling_arg,
         EXPECT_EQ_PTR(NULL, rois_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(data);
-        free(rois);
-        free(out);
-        free(refs);
+        ct_free_mem(data);
+        ct_free_mem(rois);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 
-    free(data_dims);
-    free(rois_dims);
-    free(out_dims);
+    ct_free_mem(data_dims);
+    ct_free_mem(rois_dims);
+    ct_free_mem(out_dims);
 
-    free(data_strides);
-    free(rois_strides);
-    free(out_strides);
+    ct_free_mem(data_strides);
+    ct_free_mem(rois_strides);
+    ct_free_mem(out_strides);
 }
 
 
@@ -2333,7 +2334,7 @@ static void ownDeconvolution(
 
             sum = ownLoadValueAsRawInt(fmt, (char *)bias_ptr + bias_byte_offset);
         }
-        
+
         for (size_t ifm = 0; ifm < input_c; ++ifm)
         {
             for (size_t w_y = 0; w_y < weight_h; ++w_y)
@@ -2461,9 +2462,9 @@ TEST_WITH_ARG(TensorNN, testDeconvolutionLayer, test_deconvolution_layer_arg,
         CT_RNG_INIT(rng, *seed);
     }
 
-    vx_enum data_type;
-    vx_uint8 fixed_point_position;
-    vx_size sizeof_data_type;
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
     ownUnpackFormat(arg_->fmt, &data_type, &fixed_point_position, &sizeof_data_type);
 
     const size_t inout_dim_num = 3 + arg_->batching_dim;
@@ -2568,11 +2569,11 @@ TEST_WITH_ARG(TensorNN, testDeconvolutionLayer, test_deconvolution_layer_arg,
         const size_t weight_count = weight_bytes / sizeof_data_type;
         const size_t bias_count = bias_bytes / sizeof_data_type;
 
-        void * const in = malloc(in_bytes);
-        void * const weight = malloc(weight_bytes);
-        void * const bias = bias_dim_num ? malloc(bias_bytes) : NULL;
-        void * const out = malloc(out_bytes);
-        void * const refs = malloc(out_bytes);
+        void * const in = ct_alloc_mem(in_bytes);
+        void * const weight = ct_alloc_mem(weight_bytes);
+        void * const bias = bias_dim_num ? ct_alloc_mem(bias_bytes) : NULL;
+        void * const out = ct_alloc_mem(out_bytes);
+        void * const refs = ct_alloc_mem(out_bytes);
         ASSERT(in && weight && (!bias_count || bias) && out && refs);
 
         {
@@ -2667,11 +2668,11 @@ TEST_WITH_ARG(TensorNN, testDeconvolutionLayer, test_deconvolution_layer_arg,
         EXPECT_EQ_PTR(NULL, bias_tensor);
         EXPECT_EQ_PTR(NULL, out_tensor);
 
-        free(in);
-        free(weight);
-        free(bias);
-        free(out);
-        free(refs);
+        ct_free_mem(in);
+        ct_free_mem(weight);
+        ct_free_mem(bias);
+        ct_free_mem(out);
+        ct_free_mem(refs);
     }
 }
 
@@ -2687,3 +2688,4 @@ TESTCASE_TESTS(TensorNN,
     testDeconvolutionLayer
 )
 #endif
+#endif//OPENVX_CONFORMANCE_NEURAL_NETWORKS

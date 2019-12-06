@@ -18,6 +18,7 @@ float(*convertToFloatFunc(vx_enum df))(const char*)
 #endif
     if (df == VX_TYPE_FLOAT32)
 		return FP32ToFloat;
+    return NULL;
 }
 
 //Local function that returns a pointer to a function that converts float to the image format
@@ -31,6 +32,7 @@ void(*convertFromFloatFunc(vx_enum df))(float, char*)
 #endif
     if (df == VX_TYPE_FLOAT32)
         return floatToFP32;
+    return NULL;
 }
 
 /** @brief Loads image from a file and converts it to float.
@@ -50,7 +52,7 @@ float* loadImageFromFile(const char* fileName, int* width, int* height, int* cha
         WriteLog("Failed to load image from file %s", fileName);
         return NULL;
     }
-    
+
     size_t imageSize = (*width) * (*height) * (*channels);
     float* imageF = (float*) malloc((*width) * (*height) * (*channels) * sizeof(float));
     for (size_t i = 0; i < imageSize; ++i)
@@ -157,7 +159,7 @@ vx_status imageToMDData(vx_tensor mddata, const float* image, int width, int hei
 	    WriteLog("Trying to load image with %d channels. Currently only images with 1 or 3 channels are supported.\n", channels);
 		return VX_FAILURE;
 	}
-	
+
 	vx_size dims_num = 0;
 	vx_size dimensionsArray[VX_MAX_TENSOR_DIMS_CT] = { 0 };
     vx_status status = vxQueryTensor(mddata, VX_TENSOR_NUMBER_OF_DIMS, &dims_num, sizeof(dims_num));
@@ -173,7 +175,7 @@ vx_status imageToMDData(vx_tensor mddata, const float* image, int width, int hei
         WriteLog("MDData has less than 3 dimensions. It cannot store an image\n");
         return VX_FAILURE;
     }
-	
+
 	if (width != dimensionsArray[1] || height != dimensionsArray[0] || channels != dimensionsArray[2])
 	{
 	    WriteLog("Image size %dx%dx%d does not suit MDData size %dx%dx%d\n", width, height, channels, dimensionsArray[1], dimensionsArray[0], dimensionsArray[1]);
@@ -192,7 +194,7 @@ vx_status imageToMDData(vx_tensor mddata, const float* image, int width, int hei
 	const vx_size viewStart[VX_MAX_TENSOR_DIMS_CT] = { 0 };
     mddataBasePtr = malloc(width*height*3*sizeof(vx_int16));
     if (!mddataBasePtr) { WriteLog("ERROR: malloc failed..."); return VX_FAILURE; }
-    
+
 	size_t channelsOrderFix = channels == 1 ? 0 : 2;
     void(*convertFromFloat)(float, char*) = convertFromFloatFunc(dt);
     for (size_t h = 0; h < dimensionsArray[0]; ++h)
@@ -235,12 +237,12 @@ char** loadClassificationFile(const char* fileFullPath, size_t* classesNum)
         WriteLog("ERROR: cannot open classification file %s\n", fileFullPath);
         return NULL;
     }
-    
+
     //Get file size
     fseek(fp, 0, SEEK_END); // seek to end of file
     size_t fileSize = ftell(fp); // get current file pointer
     fseek(fp, 0, SEEK_SET); // seek back to beginning of file
-    
+
     char* fileContent = (char*)malloc(fileSize + 1);
     if (fread(fileContent, 1, fileSize, fp) != fileSize)
     {
@@ -250,7 +252,7 @@ char** loadClassificationFile(const char* fileFullPath, size_t* classesNum)
         return NULL;
     }
     fclose(fp);
-    
+
     size_t classCount = 0;
     for (size_t i = 0; i < fileSize; ++i)
     {
@@ -265,7 +267,7 @@ char** loadClassificationFile(const char* fileFullPath, size_t* classesNum)
         fileContent[fileSize] = '\0';
         classCount++;
     }
-    
+
     char** classArray = (char**)malloc(classCount * sizeof(char*));
     size_t classIndex = 0;
     for (size_t i = 0; i < fileSize + 1; ++i)
@@ -313,7 +315,7 @@ void moveHighestProbToTheBegin(float** prob, size_t classesNum, size_t sortNum)
 	    WriteLog("Error in moveHighestProbToTheBegin, received NULL pointer\n");
 		return;
 	}
-	
+
     for (size_t sortIndex = 0; sortIndex < sortNum; ++sortIndex)
     {
         size_t highProbIndex = sortIndex;

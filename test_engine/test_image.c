@@ -27,6 +27,8 @@ uint32_t ct_image_bits_per_pixel(vx_df_image format)
 {
     switch(format)
     {
+        case VX_DF_IMAGE_U1:
+            return 1 * 1;
         case VX_DF_IMAGE_U8:
             return 8 * 1;
         case VX_DF_IMAGE_U16:
@@ -55,6 +57,7 @@ int ct_channels(vx_df_image format)
 {
     switch(format)
     {
+        case VX_DF_IMAGE_U1:
         case VX_DF_IMAGE_U8:
         case VX_DF_IMAGE_U16:
         case VX_DF_IMAGE_S16:
@@ -76,6 +79,8 @@ uint32_t ct_stride_bytes(CT_Image image)
     uint32_t factor = 0;
     switch(image->format)
     {
+        case VX_DF_IMAGE_U1:
+            return (uint32_t)(image->stride + 7) / 8;
         case VX_DF_IMAGE_U8:
         case VX_DF_IMAGE_NV21:
         case VX_DF_IMAGE_NV12:
@@ -107,7 +112,16 @@ uint32_t ct_stride_bytes(CT_Image image)
 
 static size_t ct_image_data_size(uint32_t width, uint32_t height, vx_df_image format)
 {
-    return (size_t)width * height * ct_image_bits_per_pixel(format) / 8;
+    if (format == VX_DF_IMAGE_U1)
+    {
+        /* round up to full bytes */
+        size_t rowSize = (size_t)(width * ct_image_bits_per_pixel(format) + 7) / 8;
+        return (size_t)rowSize * height;
+    }
+    else
+    {
+        return (size_t)width * height * ct_image_bits_per_pixel(format) / 8;
+    }
 }
 
 #ifdef DEBUG_CT_IMAGE
@@ -225,7 +239,8 @@ CT_Image ct_allocate_image(uint32_t width, uint32_t height, vx_df_image format)
             break;
     };
 
-    image = ct_allocate_image_hdr_impl(width, height, width, format, 1);
+    uint32_t stride = (format == VX_DF_IMAGE_U1) ? ((width + 7) / 8) * 8 : width;   // U1 y-stride is multiple of 8
+    image = ct_allocate_image_hdr_impl(width, height, stride, format, 1);
 
 #ifdef DEBUG_CT_IMAGE
     printf("ALLOCATED: "); ct_print_image(image);
@@ -247,6 +262,9 @@ CT_Image ct_get_image_roi(CT_Image img, CT_Rect roi)
 
     switch(img->format) // not sure if roi for multi-plane formats is needed at all
     {
+        case VX_DF_IMAGE_U1:
+            CT_ASSERT_(return 0, (img->roi.x + roi.x) % 8 == 0);   // U1 subimage must start on byte boundary in parent image
+            break;
         case VX_DF_IMAGE_UYVY:
         case VX_DF_IMAGE_YUYV:
             CT_ASSERT_(return 0, roi.width % 2 == 0 && roi.x % 2 == 0); // width must be even
@@ -273,7 +291,18 @@ CT_Image ct_get_image_roi(CT_Image img, CT_Rect roi)
         ct_image_addref(img);
         image->data_begin_ = img->data_begin_;
         image->refcount_   = img->refcount_;
+
         image->data.y      = img->data.y + (img->stride * roi.y + roi.x) * bpp / 8;
+
+        if (img->format == VX_DF_IMAGE_U1)
+        {
+            int xShft = ct_div_floor(img->roi.x % 8 + roi.x, 8);
+            img->data.y = img->data.y + ct_stride_bytes(img) * roi.y + xShft;
+        }
+        else
+        {
+            img->data.y = img->data.y + (img->stride * roi.y + roi.x) * bpp / 8;
+        }
     }
 
 #ifdef DEBUG_CT_IMAGE
@@ -319,7 +348,15 @@ void ct_adjust_roi(CT_Image img, int left, int top, int right, int bottom)
     }
     else
     {
-        img->data.y = img->data.y + (img->stride * top + left) * ct_image_bits_per_pixel(img->format) / 8;
+        if (img->format == VX_DF_IMAGE_U1)
+        {
+            int xShft = ct_div_floor(img->roi.x % 8 + left, 8);
+            img->data.y = img->data.y + ct_stride_bytes(img) * top + xShft;
+        }
+        else
+        {
+            img->data.y = img->data.y + (img->stride * top + left) * ct_image_bits_per_pixel(img->format) / 8;
+        }
         img->roi.x  = (uint32_t)new_x;
         img->roi.y  = (uint32_t)new_y;
         img->width  = (uint32_t)new_width;
@@ -405,6 +442,10 @@ int own_elem_size(vx_df_image format, vx_uint32 plane)
 
     switch (format)
     {
+    case VX_DF_IMAGE_U1:
+        channel_step_x = 0;
+        break;
+
     case VX_DF_IMAGE_U8:
         channel_step_x = 1;
         break;
@@ -536,6 +577,18 @@ void *ct_image_copy_impl(CT_Image ctimg, vx_image vximg, CT_ImageCopyDirection d
             {
                 switch (ct_format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8* ct_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * ct_stride_bytes(ctimg) + x / 8);
+                    vx_uint8* vx_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(p_vx_base, x, y, &addr);
+                    vx_uint8 mask = 1 << (x % 8);
+                    if (COPY_CT_IMAGE_TO_VX_IMAGE == dir)
+                        vx_ptr[0] = (vx_ptr[0] & ~mask) | (ct_ptr[0] & mask);
+                    else
+                        ct_ptr[0] = (ct_ptr[0] & ~mask) | (vx_ptr[0] & mask);
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* ct_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * ctimg->stride * ct_elem_size + x * ct_elem_size);
@@ -741,6 +794,72 @@ void *ct_image_copy_impl(CT_Image ctimg, vx_image vximg, CT_ImageCopyDirection d
     return (COPY_CT_IMAGE_TO_VX_IMAGE == dir ? (void*)vximg : (void*)ctimg);
 }
 
+// Down conversion according to the spec (i.e. valueU1 = valueU8 != 0 ? 1 : 0)
+void U8_ct_image_to_U1_ct_image(CT_Image img_in, CT_Image img_out)
+{
+    ASSERT(img_in);
+    ASSERT(img_out);
+    ASSERT(img_in->format == VX_DF_IMAGE_U8);
+    ASSERT(img_out->format == VX_DF_IMAGE_U1);
+    ASSERT( (img_in->width == img_out->width) && (img_in->height == img_out->height) );
+
+    uint8_t pixel;
+    uint32_t x, y, xShftd;
+    uint8_t* in_base_ptr  = ct_image_get_plane_base(img_in, 0);
+    uint8_t* out_base_ptr = ct_image_get_plane_base(img_out, 0);
+    for (y = 0; y < img_in->height; ++y)
+    {
+        for (x = 0; x < img_in->width; ++x)
+        {
+            xShftd = x + img_out->roi.x % 8;     // U1 ROI respecting offset
+            pixel  = ((in_base_ptr[y * img_in->stride + x] != 0) ? 1 : 0) << (xShftd % 8);
+            out_base_ptr[y * ct_stride_bytes(img_out) + xShftd / 8] =
+                (out_base_ptr[y * ct_stride_bytes(img_out) + xShftd / 8] & ~(1 << (xShftd % 8))) | pixel;
+        }
+    }
+}
+
+// Up conversion according to the spec (i.e. valueU8 = valueU1 != 0 ? 255 : 0)
+void U1_ct_image_to_U8_ct_image(CT_Image img_in, CT_Image img_out)
+{
+    ASSERT(img_in);
+    ASSERT(img_out);
+    ASSERT(img_in->format == VX_DF_IMAGE_U1);
+    ASSERT(img_out->format == VX_DF_IMAGE_U8);
+    ASSERT( (img_in->width == img_out->width) && (img_in->height == img_out->height) );
+
+    uint8_t pixel;
+    uint32_t x, y, xShftd;
+    uint8_t* in_base_ptr  = ct_image_get_plane_base(img_in, 0);
+    uint8_t* out_base_ptr = ct_image_get_plane_base(img_out, 0);
+    for (y = 0; y < img_in->height; ++y)
+    {
+        for (x = 0; x < img_in->width; ++x)
+        {
+            xShftd = x + img_in->roi.x % 8;      // U1 ROI respecting offset
+            pixel  = in_base_ptr[y * ct_stride_bytes(img_in) + xShftd / 8] & (1 << (xShftd % 8));
+            out_base_ptr[y * img_out->stride + x] = (pixel != 0) ? 255 : 0;
+        }
+    }
+}
+
+// Threshold a U8 CT_Image with the input uint8_t threshold (new_val = old_val > thresh ? 255 : 0)
+void threshold_U8_ct_image(CT_Image img, uint8_t thresh)
+{
+    ASSERT(img);
+    ASSERT(img->width > 0 && img->height > 0);
+    ASSERT(img->format == VX_DF_IMAGE_U8);
+
+    uint32_t x, y;
+    for (y = 0; y < img->height; y++)
+    {
+        for (x = 0; x < img->width; x++)
+        {
+            img->data.y[y * img->stride + x] = (img->data.y[y * img->stride + x] > thresh) ? 255 : 0;
+        }
+    }
+}
+
 /*
     wrap_half_modulo: specifies if the smallest value follows the biggest (e.g. 255 + 1 == 0 or not)
     0            = default - half of data type range
@@ -799,7 +918,39 @@ int ct_assert_eq_ctimage_impl(CT_Image expected, CT_Image actual, uint32_t thres
             }                                                                                   \
     }
 
-    if (expected->format == VX_DF_IMAGE_U8)
+#define FIND_MAX_DIFF_SIMPLE_U1(eptr, aptr)                                                     \
+    {                                                                                           \
+        uint32_t xStartE, xStartA, xE, xA, maskE, maskA, diff;                                  \
+        xStartE = expected->roi.x % 8;                                                          \
+        xStartA =   actual->roi.x % 8;                                                          \
+        for (i = 0; i < expected->height; ++i)                                                  \
+            for (j = 0; j < expected->width; ++j)                                               \
+            {                                                                                   \
+                xE = j + xStartE;                                                               \
+                xA = j + xStartA;                                                               \
+                maskE = 1u << (xE % 8);                                                         \
+                maskA = 1u << (xA % 8);                                                         \
+                diff = ((eptr[i * ct_stride_bytes(expected) + xE / 8] & maskE) >> (xE % 8) !=   \
+                        (aptr[i * ct_stride_bytes(actual)   + xA / 8] & maskA) >> (xA % 8)) ? 1u : 0u; \
+               if (diff > max_diff)                                                             \
+               {                                                                                \
+                   max_diff = diff;                                                             \
+                   max_y = i;                                                                   \
+                   max_x = j;                                                                   \
+                   vale = (eptr[i * ct_stride_bytes(expected) + xE / 8] & maskE) >> (xE % 8);   \
+                   vala = (aptr[i * ct_stride_bytes(actual)   + xA / 8] & maskA) >> (xA % 8);   \
+               }                                                                                \
+               if (diff > threshold)                                                            \
+                   ++diff_pixels;                                                               \
+            }                                                                                   \
+    }                                                                                           \
+
+    if (expected->format == VX_DF_IMAGE_U1)
+    {
+        // Wrap_half_modulo is not used for U1 image comparisons
+        FIND_MAX_DIFF_SIMPLE_U1(expected->data.y, actual->data.y)
+    }
+    else if (expected->format == VX_DF_IMAGE_U8)
     {
         if (!wrap_half_modulo) wrap_half_modulo = 1u << 7;
         FIND_MAX_DIFF_SIMPLE(expected->data.y, actual->data.y)
@@ -829,7 +980,8 @@ int ct_assert_eq_ctimage_impl(CT_Image expected, CT_Image actual, uint32_t thres
         // skip check
     }
 
-    if (expected->format == VX_DF_IMAGE_U8 || expected->format == VX_DF_IMAGE_U16 || expected->format == VX_DF_IMAGE_U32)
+    if (expected->format == VX_DF_IMAGE_U1 || expected->format == VX_DF_IMAGE_U8 ||
+        expected->format == VX_DF_IMAGE_U16 || expected->format == VX_DF_IMAGE_U32)
     {
         if (max_diff > threshold)
         {
@@ -950,6 +1102,40 @@ int ct_assert_eq_ctimage_impl(CT_Image expected, CT_Image actual, uint32_t thres
     return 1;
 }
 
+uint8_t* ct_image_data_ptr_1u(CT_Image image, uint32_t x, uint32_t y)
+{
+    uint8_t* ptr = &image->data.y[y * ct_stride_bytes(image) + x / 8];
+    return ptr;
+}
+
+uint8_t ct_image_data_replicate_1u(CT_Image image, int32_t x, int32_t y)
+{
+    uint8_t offset, byte, pxl_val;
+    int32_t border_x_start = image->roi.x % 8;
+
+    EXPECT(image->width > 0 && image->height > 0);
+    if (x < border_x_start) x = border_x_start;     // Handle ROI byte-shift offset
+    if (x >= (int)image->width + border_x_start) x = image->width - 1 + border_x_start;
+    if (y < 0) y = 0;
+    if (y >= (int)image->height) y = image->height - 1;
+    offset = x % 8;
+    byte = image->data.y[y * ct_stride_bytes(image) + x / 8];
+    pxl_val = (byte & (1u << offset)) >> offset;
+    return pxl_val;
+}
+
+uint8_t ct_image_data_constant_1u(CT_Image image, int32_t x, int32_t y, vx_bool constant_value)
+{
+    uint8_t offset, byte, pxl_val;
+    int32_t border_x_start = image->roi.x % 8;
+
+    if (x < border_x_start || x >= (int)image->width + border_x_start || y < 0 || y >= (int)image->height)
+        return (uint8_t)(constant_value ? 1 : 0);
+    offset = x % 8;
+    byte = image->data.y[y * ct_stride_bytes(image) + x / 8];
+    pxl_val = (byte & (1u << offset)) >> offset;
+    return pxl_val;
+}
 
 uint8_t* ct_image_data_ptr_8u(CT_Image image, uint32_t x, uint32_t y)
 {
@@ -1005,13 +1191,27 @@ void ct_dump_image_info_ex(CT_Image image, int dump_width, int dump_height)
             image, (int)sizeof(image->format), (char*)&image->format,
             image->width, image->height);
 
-    if (image->format == VX_DF_IMAGE_U8)
+    if (image->format == VX_DF_IMAGE_U1)
     {
         for (y = 0; y < max_y; ++y)
         {
             for (x = 0; x < max_x; ++x)
             {
-                uint8_t* ptr = ct_image_data_ptr_8u(image, x, y);
+                int xShftd = x + image->roi.x % 8;
+                uint8_t offset = xShftd % 8;
+                uint8_t* ptr = CT_IMAGE_DATA_PTR_1U(image, xShftd, y);
+                printf("%1d ", (int)( (*ptr & (1u << offset)) >> offset ));
+            }
+            printf("%s", strend);
+        }
+    }
+    else if (image->format == VX_DF_IMAGE_U8)
+    {
+        for (y = 0; y < max_y; ++y)
+        {
+            for (x = 0; x < max_x; ++x)
+            {
+                uint8_t* ptr = CT_IMAGE_DATA_PTR_8U(image, x, y);
                 printf("%3d ", (int)*ptr);
             }
             printf("%s", strend);
@@ -1110,30 +1310,35 @@ void ct_fill_ct_image_random(CT_Image image, uint64_t* seed, int a, int b)
         format = VX_DF_IMAGE_U8;
     }
 
-    ASSERT( format == VX_DF_IMAGE_U8 ||
+    ASSERT( format == VX_DF_IMAGE_U1  || format == VX_DF_IMAGE_U8  ||
             format == VX_DF_IMAGE_U16 || format == VX_DF_IMAGE_S16 ||
-            format == VX_DF_IMAGE_U32 || format == VX_DF_IMAGE_S32);
+            format == VX_DF_IMAGE_U32 || format == VX_DF_IMAGE_S32 );
 
 #undef CASE_FILL_RNG
-#define CASE_FILL_RNG(format, type, cast_macro) \
-    case format: \
-    { \
-    uint8_t* ptr = image->data.y; \
-    for( p = 0; p < nplanes; p++ ) \
-    for( y = 0; y < height[p]; y++, ptr += stride[p] ) \
-    { \
-        type* tptr = (type*)ptr; \
-        for( x = 0; x < width[p]; x++ ) \
-        { \
-            int val = CT_RNG_NEXT_INT(*seed, a, b); \
-            tptr[x] = cast_macro(val); \
-        } \
-    } \
-    } \
+#define CASE_FILL_RNG(format, type, cast_macro)                                                 \
+    case format:                                                                                \
+    {                                                                                           \
+        uint8_t* ptr = image->data.y;                                                           \
+        for( p = 0; p < nplanes; p++ )                                                          \
+            for( y = 0; y < height[p]; y++, ptr += stride[p] )                                  \
+            {                                                                                   \
+                type* tptr = (type*)ptr;                                                        \
+                for( x = 0; x < width[p]; x++ )                                                 \
+                {                                                                               \
+                    uint32_t x_adr = format != VX_DF_IMAGE_U1 ? x : (x / 8);                    \
+                    int   val = CT_RNG_NEXT_INT(*seed, a, b);                                   \
+                    type tval = cast_macro(val);                                                \
+                    tval = format != VX_DF_IMAGE_U1 ? tval :                                    \
+                           (tptr[x_adr] & ~(1 << (x % 8))) | (tval << (x % 8)); /* Set U1 bit */ \
+                    tptr[x_adr] = tval;                                                         \
+                }                                                                               \
+            }                                                                                   \
+    }                                                                                           \
     break
 
     switch( format )
     {
+        CASE_FILL_RNG(VX_DF_IMAGE_U1, uint8_t, CT_CAST_U1);
         CASE_FILL_RNG(VX_DF_IMAGE_U8, uint8_t, CT_CAST_U8);
         CASE_FILL_RNG(VX_DF_IMAGE_U16, uint16_t, CT_CAST_U16);
         CASE_FILL_RNG(VX_DF_IMAGE_S16, int16_t, CT_CAST_S16);
@@ -1160,6 +1365,7 @@ uint32_t ct_get_num_planes(vx_df_image format)
 
     switch (format)
     {
+    case VX_DF_IMAGE_U1:
     case VX_DF_IMAGE_U8:
     case VX_DF_IMAGE_U16:
     case VX_DF_IMAGE_S16:
@@ -1189,6 +1395,7 @@ int ct_get_num_channels(vx_df_image format)
 {
     switch (format)
     {
+        case VX_DF_IMAGE_U1:
         case VX_DF_IMAGE_U8:
         case VX_DF_IMAGE_U16:
         case VX_DF_IMAGE_S16:
@@ -1217,6 +1424,8 @@ int ct_image_get_channel_step_x(CT_Image image, vx_enum channel)
 
     switch (format)
     {
+        case VX_DF_IMAGE_U1:
+            return 0;
         case VX_DF_IMAGE_U8:
             return 1;
         case VX_DF_IMAGE_U16:
@@ -1253,6 +1462,8 @@ int ct_image_get_channel_step_y(CT_Image image, vx_enum channel)
 
     switch (format)
     {
+        case VX_DF_IMAGE_U1:
+            return (image->stride + 7) / 8;
         case VX_DF_IMAGE_U8:
             return image->stride;
         case VX_DF_IMAGE_U16:

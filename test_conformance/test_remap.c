@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -243,7 +245,7 @@ static vx_remap remap_generate_map(vx_context context, int src_width, int src_he
             }
         }
 
-        vxCopyRemapPatch(map, &rect, stride_y, ptr_w, VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);    
+        vxCopyRemapPatch(map, &rect, stride_y, ptr_w, VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
         ct_free_mem(ptr_w);
     }
 
@@ -636,7 +638,7 @@ TEST_WITH_ARG(Remap, testImmediatePolicy, Arg,
     {
         expected_status = VX_SUCCESS;
     }
-        
+
     if (status == VX_SUCCESS)
     {
         ASSERT_NO_FAILURE(output = ct_image_from_vx_image(output_image));
@@ -855,3 +857,4 @@ TESTCASE_TESTS(Remap,
 TESTCASE_TESTS(vxCopyRemapPatch, testCopyRandomReamp)
 TESTCASE_TESTS(vxMapRemapPatch, testMapRandomRemap)
 
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

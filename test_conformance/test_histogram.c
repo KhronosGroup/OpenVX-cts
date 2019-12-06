@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 #include "test_engine/test.h"
 
@@ -228,8 +230,8 @@ TEST_WITH_ARG(Histogram, testOnRandom, format_arg,
                 CT_FAIL("check for query distribution attribute VX_DISTRIBUTION_BINS failed\n");
 
             VX_CALL(vxQueryDistribution(dist1, VX_DISTRIBUTION_WINDOW, &attr_window, sizeof(attr_window)));
-	    /*Tthe attribute is specified as valid only when the range is a multiple of nbins, 
-	     * in other cases, its value shouldn't be checked */
+        /*Tthe attribute is specified as valid only when the range is a multiple of nbins,
+         * in other cases, its value shouldn't be checked */
             if (((range % nbins) == 0) && (attr_window != reference_window(range, nbins)))
                 CT_FAIL("check for query distribution attribute VX_DISTRIBUTION_WINDOW failed\n");
 
@@ -305,3 +307,5 @@ TEST_WITH_ARG(Histogram, testOnRandom, format_arg,
 }
 
 TESTCASE_TESTS(Histogram, testOnRandom)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

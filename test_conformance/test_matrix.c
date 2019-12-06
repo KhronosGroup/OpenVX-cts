@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -208,3 +210,6 @@ TEST_WITH_ARG(Matrix, test_vxQueryMatrix, data_type_arg,
 
 
 TESTCASE_TESTS(Matrix, test_vxCreateMatrix, test_vxCreateVirtualMatrix, test_vxCreateMatrixFromPatternAndOrigin, test_vxCopyMatrix, test_vxQueryMatrix)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+

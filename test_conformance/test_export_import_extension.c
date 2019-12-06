@@ -111,7 +111,7 @@ TEST_WITH_ARG(ExtensionObject, testExtensionObject, format_arg,
     vx_distribution distribution = vxCreateDistribution(context, 32, 0, 255);
     reference_list[2] = (vx_reference ) distribution;
 
-    vx_threshold threshold = vxCreateThreshold(context, VX_THRESHOLD_TYPE_BINARY, VX_TYPE_UINT8);
+    vx_threshold threshold = vxCreateThresholdForImage(context, VX_THRESHOLD_TYPE_BINARY, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8);
     reference_list[3] = (vx_reference ) threshold;
 
     vx_matrix matrix = vxCreateMatrix(context, VX_TYPE_UINT8, 3, 5);
@@ -166,7 +166,7 @@ TEST_WITH_ARG(ExtensionObject, testExtensionObject, format_arg,
     reference_list[12] = (vx_reference ) graph;
 
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxExportObjectsToMemory( context, 13, &reference_list[0], &uses_list[0], &blob_ptr, &blob_bytes));
-    void * export_blob = malloc(blob_bytes);
+    void * export_blob = ct_alloc_mem(blob_bytes);
     memcpy(export_blob, blob_ptr, blob_bytes);
 
     VX_CALL(vxReleaseImage(&image));
@@ -197,7 +197,7 @@ TEST_WITH_ARG(ExtensionObject, testExtensionObject, format_arg,
     import_list[1] = (vx_reference ) lut1;
     vx_distribution distribution1 = vxCreateDistribution(context1, 32, 0, 255);
     import_list[2] = (vx_reference ) distribution1;
-    vx_threshold threshold1 = vxCreateThreshold(context1, VX_THRESHOLD_TYPE_BINARY, VX_TYPE_UINT8);
+    vx_threshold threshold1 = vxCreateThresholdForImage(context1, VX_THRESHOLD_TYPE_BINARY, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8);
     import_list[3] = (vx_reference ) threshold1;
     vx_matrix matrix1 = vxCreateMatrix(context1, VX_TYPE_UINT8, 3, 5);
     import_list[4] = (vx_reference ) matrix1;
@@ -263,7 +263,7 @@ TEST_WITH_ARG(ExtensionObject, testExtensionObject, format_arg,
     vxReleaseReference(&name_reference);
 
     ASSERT_EQ_VX_STATUS(VX_SUCCESS,vxReleaseImport(&import));
-    free(export_blob);
+    ct_free_mem(export_blob);
 }
 
 TESTCASE_TESTS(ExtensionObject, testExtensionObject)

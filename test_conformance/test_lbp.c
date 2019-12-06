@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_USE_ENHANCED_VISION
+
 #include <math.h>
 #include <float.h>
 #include <string.h>
@@ -158,3 +160,5 @@ TEST_WITH_ARG(LBP, testImmediateProcessing, Arg,
 }
 
 TESTCASE_TESTS(LBP, testNodeCreation, testGraphProcessing, testImmediateProcessing)
+
+#endif //OPENVX_USE_ENHANCED_VISION

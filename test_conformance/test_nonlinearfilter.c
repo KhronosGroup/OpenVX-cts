@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <VX/vx.h>
 #include <VX/vxu.h>
-
 #include "test_engine/test.h"
-#include "shared_functions.h"
 
 TESTCASE(NonLinearFilter, CT_VXContext, ct_setup_vx_context, 0)
-
 
 #define MASK_SIZE_MAX (5)
 
@@ -63,12 +62,16 @@ TEST(NonLinearFilter, testNodeCreation)
     ASSERT(src_image == 0);
 }
 
-static CT_Image generate_random(const char* fileName, int width, int height)
+static CT_Image generate_random(const char* fileName, int width, int height, vx_df_image format)
 {
     CT_Image image;
 
-    ASSERT_NO_FAILURE_(return 0,
-        image = ct_allocate_ct_image_random(width, height, VX_DF_IMAGE_U8, &CT()->seed_, 0, 256));
+    ASSERT_(return 0, format == VX_DF_IMAGE_U1 || format == VX_DF_IMAGE_U8);
+
+    if (format == VX_DF_IMAGE_U1)
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 2));
+    else
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 256));
 
     return image;
 }
@@ -85,11 +88,13 @@ static int vx_uint8_compare(const void *p1, const void *p2)
         return -1;
 }
 
-static void filter_calculate(vx_enum function, CT_Image src, vx_coordinates2d_t* origin, vx_int32 cols, vx_int32 rows, vx_uint8* mask, vx_border_t* border, int32_t x, int32_t y, uint8_t *data)
+static uint8_t filter_calculate(vx_enum function, CT_Image src, vx_coordinates2d_t* origin, vx_int32 cols, vx_int32 rows, vx_uint8* mask, vx_border_t* border, int32_t x, int32_t y, uint32_t shift_x_u1)
 {
     vx_uint8 values[MASK_SIZE_MAX * MASK_SIZE_MAX];
+    vx_uint8 res_val = 0;
 
     vx_int32 i, j, ci, cj, m = 0, v = 0;
+    vx_int32 x_start = (vx_int32)shift_x_u1;    // Bit-shift offset for U1 images, always 0 for other image formats
     vx_int32 cx = origin->x;
     vx_int32 cy = origin->y;
 
@@ -99,10 +104,17 @@ static void filter_calculate(vx_enum function, CT_Image src, vx_coordinates2d_t*
         {
             if (mask[m])
             {
-                ci = MAX(0, MIN(i, (vx_int32)src->width - 1));
+                ci = MAX(x_start, MIN(i, (vx_int32)src->width - 1 + x_start));
                 cj = MAX(0, MIN(j, (vx_int32)src->height - 1));
 
-                values[v++] = (border->mode == VX_BORDER_CONSTANT && (i != ci || j != cj)) ? border->constant_value.U8 : *CT_IMAGE_DATA_PTR_8U(src, ci, cj);
+                if (src->format == VX_DF_IMAGE_U1)
+                    values[v++] = (border->mode == VX_BORDER_CONSTANT && (i != ci || j != cj))
+                                    ?  border->constant_value.U1 ? 1 : 0
+                                    : (*CT_IMAGE_DATA_PTR_1U(src, ci, cj) & (1 << (ci % 8))) >> (ci % 8);
+                else
+                    values[v++] = (border->mode == VX_BORDER_CONSTANT && (i != ci || j != cj))
+                                    ? border->constant_value.U8
+                                    : *CT_IMAGE_DATA_PTR_8U(src, ci, cj);
             }
         }
     }
@@ -111,20 +123,23 @@ static void filter_calculate(vx_enum function, CT_Image src, vx_coordinates2d_t*
 
     switch (function)
     {
-    case VX_NONLINEAR_FILTER_MIN: *data = values[0]; break; /* minimal value */
-    case VX_NONLINEAR_FILTER_MAX: *data = values[v - 1]; break; /* maximum value */
-    case VX_NONLINEAR_FILTER_MEDIAN: *data = values[v / 2]; break; /* pick the middle value */
+    case VX_NONLINEAR_FILTER_MIN:    res_val = values[0];     break; /* minimal value */
+    case VX_NONLINEAR_FILTER_MAX:    res_val = values[v - 1]; break; /* maximum value */
+    case VX_NONLINEAR_FILTER_MEDIAN: res_val = values[v / 2]; break; /* pick the middle value */
     }
+
+    return res_val;
 }
 
 void filter_create_reference_image(vx_enum function, CT_Image src, vx_coordinates2d_t* origin, vx_size cols, vx_size rows, vx_uint8* mask, CT_Image* pdst, vx_border_t* border)
 {
     CT_Image dst = NULL;
 
-    CT_ASSERT(src->format == VX_DF_IMAGE_U8);
+    CT_ASSERT(src->format == VX_DF_IMAGE_U1 || src->format == VX_DF_IMAGE_U8);
 
-    dst = ct_allocate_image(src->width, src->height, VX_DF_IMAGE_U8);
+    dst = ct_allocate_image(src->width, src->height, src->format);
 
+    vx_uint32 shift_x_u1 = (src->format == VX_DF_IMAGE_U1) ? src->roi.x % 8 : 0;
     if (border->mode == VX_BORDER_UNDEFINED)
     {
         vx_uint32 left = origin->x;
@@ -132,16 +147,41 @@ void filter_create_reference_image(vx_enum function, CT_Image src, vx_coordinate
         vx_uint32 right = (vx_uint32)(cols - origin->x - 1);
         vx_uint32 bottom = (vx_uint32)(rows - origin->y - 1);
 
-        CT_FILL_IMAGE_8U(return, dst,
-            if (x >= left && y >= top && x < src->width - right && y < src->height - bottom)
-                filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, x, y, dst_data);
-        );
+        if (src->format == VX_DF_IMAGE_U1)
+        {
+            CT_FILL_IMAGE_1U(return, dst,
+                if (x >= left && y >= top && x < src->width - right && y < src->height - bottom)
+                {
+                    uint32_t xShftdSrc = x + shift_x_u1;
+                    uint8_t res = filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, xShftdSrc, y, shift_x_u1);
+                    *dst_data = (*dst_data & ~(1 << offset)) | (res << offset);
+                });
+        }
+        else
+        {
+            CT_FILL_IMAGE_8U(return, dst,
+                if (x >= left && y >= top && x < src->width - right && y < src->height - bottom)
+                    *dst_data = filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, x, y, 0);
+            );
+        }
     }
     else
     {
-        CT_FILL_IMAGE_8U(return, dst,
-            filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, x, y, dst_data);
-        );
+        if (src->format == VX_DF_IMAGE_U1)
+        {
+            CT_FILL_IMAGE_1U(return, dst,
+                {
+                    uint32_t xShftdSrc = x + shift_x_u1;
+                    uint8_t res = filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, xShftdSrc, y, shift_x_u1);
+                    *dst_data = (*dst_data & ~(1 << offset)) | (res << offset);
+                });
+        }
+        else
+        {
+            CT_FILL_IMAGE_8U(return, dst,
+                *dst_data = filter_calculate(function, src, origin, (vx_int32)cols, (vx_int32)rows, mask, border, x, y, 0);
+            );
+        }
     }
 
     *pdst = dst;
@@ -211,7 +251,7 @@ static void filter_check(vx_enum function, CT_Image src, vx_matrix mask, CT_Imag
 
     EXPECT_EQ_CTIMAGE(dst_ref, dst);
 
-#if 0
+#if 1
     if (CT_HasFailure())
     {
         printf("=== SRC ===\n");
@@ -220,6 +260,9 @@ static void filter_check(vx_enum function, CT_Image src, vx_matrix mask, CT_Imag
         ct_dump_image_info(dst);
         printf("=== EXPECTED ===\n");
         ct_dump_image_info(dst_ref);
+        ct_write_image("nlf_src.bmp",  src);
+        ct_write_image("nlf_calc.bmp", dst);
+        ct_write_image("nlf_ref.bmp",  dst_ref);
     }
 #endif
 }
@@ -227,13 +270,14 @@ static void filter_check(vx_enum function, CT_Image src, vx_matrix mask, CT_Imag
 
 typedef struct {
     const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height);
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
     const char* fileName;
     vx_size mask_size;
     vx_enum function;
     vx_enum pattern;
     vx_border_t border;
     int width, height;
+    vx_df_image format;
 } Filter_Arg;
 
 
@@ -252,8 +296,10 @@ typedef struct {
     CT_EXPAND(nextmacro(testArgName "/VX_PATTERN_CROSS", __VA_ARGS__, VX_PATTERN_CROSS))
 
 #define FILTER_PARAMETERS \
-    CT_GENERATE_PARAMETERS("randomInput/mask=3x3", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ARG, generate_random, NULL, 3), \
-    CT_GENERATE_PARAMETERS("randomInput/mask=5x5", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS_DISK, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ARG, generate_random, NULL, 5)
+    CT_GENERATE_PARAMETERS("randomInput/mask=3x3", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U8, ARG, generate_random, NULL, 3), \
+    CT_GENERATE_PARAMETERS("randomInput/mask=5x5", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS_DISK, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U8, ARG, generate_random, NULL, 5), \
+    CT_GENERATE_PARAMETERS("_U1_/randomInput/mask=3x3", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U1, ARG, generate_random, NULL, 3), \
+    CT_GENERATE_PARAMETERS("_U1_/randomInput/mask=5x5", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS_DISK, ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U1, ARG, generate_random, NULL, 5)
 
 
 TEST_WITH_ARG(NonLinearFilter, testGraphProcessing, Filter_Arg,
@@ -270,7 +316,7 @@ TEST_WITH_ARG(NonLinearFilter, testGraphProcessing, Filter_Arg,
     CT_Image src = NULL, dst = NULL;
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height));
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
 
     ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
 
@@ -324,7 +370,7 @@ TEST_WITH_ARG(NonLinearFilter, testImmediateProcessing, Filter_Arg,
     CT_Image src = NULL, dst = NULL;
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height));
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
 
     ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
 
@@ -353,7 +399,7 @@ TEST_WITH_ARG(NonLinearFilter, testImmediateProcessing, Filter_Arg,
     ASSERT(src_image == 0);
 }
 
-TEST_WITH_ARG(NonLinearFilter, testGraphProcessingWithNondefaultOrginMatrix, Filter_Arg,
+TEST_WITH_ARG(NonLinearFilter, testGraphProcessingWithNondefaultOriginMatrix, Filter_Arg,
     FILTER_PARAMETERS
     )
 {
@@ -367,7 +413,7 @@ TEST_WITH_ARG(NonLinearFilter, testGraphProcessingWithNondefaultOrginMatrix, Fil
     CT_Image src = NULL, dst = NULL;
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height));
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
 
     ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
 
@@ -409,4 +455,75 @@ TEST_WITH_ARG(NonLinearFilter, testGraphProcessingWithNondefaultOrginMatrix, Fil
     ASSERT(dst_image == 0);
     ASSERT(src_image == 0);
 }
-TESTCASE_TESTS(NonLinearFilter, testNodeCreation, testGraphProcessing, testImmediateProcessing, testGraphProcessingWithNondefaultOrginMatrix)
+
+typedef struct {
+    const char* testName;
+    CT_Image (*generator)(const char* fileName, int width, int height, vx_df_image format);
+    const char* fileName;
+    vx_size mask_size;
+    vx_enum function;
+    vx_enum pattern;
+    vx_border_t border;
+    int width, height;
+    vx_df_image format;
+    vx_rectangle_t regionShift;
+} ValidRegionTest_Arg;
+
+#ifdef FILTER_PARAMETERS
+#undef FILTER_PARAMETERS
+#endif
+#define FILTER_PARAMETERS \
+    CT_GENERATE_PARAMETERS("randomInput/mask=3x3", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_256x256, ADD_TYPE_U8, ADD_VALID_REGION_SHRINKS, ARG, generate_random, NULL, 3), \
+    CT_GENERATE_PARAMETERS("randomInput/mask=5x5", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_256x256, ADD_TYPE_U8, ADD_VALID_REGION_SHRINKS, ARG, generate_random, NULL, 5), \
+    CT_GENERATE_PARAMETERS("_U1_/randomInput/mask=3x3", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_256x256, ADD_TYPE_U1, ADD_VALID_REGION_SHRINKS, ARG, generate_random, NULL, 3), \
+    CT_GENERATE_PARAMETERS("_U1_/randomInput/mask=5x5", ADD_FUNCTIONS, ADD_PATTERNS_BOX_CROSS, ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_256x256, ADD_TYPE_U1, ADD_VALID_REGION_SHRINKS, ARG, generate_random, NULL, 5)
+
+TEST_WITH_ARG(NonLinearFilter, testWithValidRegion, ValidRegionTest_Arg,
+    FILTER_PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, dst_image = 0;
+    vx_matrix mask = 0;
+    vx_enum pattern = 0;
+
+    CT_Image src = NULL, dst = NULL;
+    vx_border_t border = arg_->border;
+    vx_rectangle_t rect = {0, 0, 0, 0}, rect_shft = arg_->regionShift;
+
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+
+    ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = ct_create_similar_image(src_image), VX_TYPE_IMAGE);
+
+    ASSERT_NO_FAILURE(vxGetValidRegionImage(src_image, &rect));
+    ALTERRECTANGLE(rect, rect_shft.start_x, rect_shft.start_y, rect_shft.end_x, rect_shft.end_y);
+    ASSERT_NO_FAILURE(vxSetImageValidRectangle(src_image, &rect));
+
+    ASSERT_VX_OBJECT(mask = vxCreateMatrixFromPattern(context, arg_->pattern, arg_->mask_size, arg_->mask_size),
+                     VX_TYPE_MATRIX);
+    VX_CALL(vxQueryMatrix(mask, VX_MATRIX_PATTERN, &pattern, sizeof(pattern)));
+    ASSERT_EQ_INT(arg_->pattern, pattern);
+
+    VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxuNonLinearFilter(context, arg_->function, src_image, mask, dst_image));
+
+    ASSERT_NO_FAILURE(dst = ct_image_from_vx_image(dst_image));
+    ASSERT_NO_FAILURE(ct_adjust_roi(dst, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+
+    ASSERT_NO_FAILURE(ct_adjust_roi(src, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+    ASSERT_NO_FAILURE(filter_check(arg_->function, src, mask, dst, &border));
+
+    VX_CALL(vxReleaseMatrix(&mask));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(mask == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TESTCASE_TESTS(NonLinearFilter, testNodeCreation, testGraphProcessing, testImmediateProcessing, testGraphProcessingWithNondefaultOriginMatrix, testWithValidRegion)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

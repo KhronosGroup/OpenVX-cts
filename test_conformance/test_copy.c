@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_USE_ENHANCED_VISION
+
 #include <VX/vx.h>
 #include <VX/vxu.h>
 
@@ -92,13 +94,13 @@ static vx_reference own_create_exemplar(vx_context context, vx_enum item_type, v
             vxReleaseReference((vx_reference*)&scalar_exemplar);
             break;
         case VX_TYPE_TENSOR:
-            dims = malloc(TENSOR_DIMS_NUM * sizeof(vx_size));
+            dims = ct_alloc_mem(TENSOR_DIMS_NUM * sizeof(vx_size));
             for(vx_size i = 0; i < TENSOR_DIMS_NUM; i++)
             {
                 dims[i] = TENSOR_DIMS_LENGTH;
             }
             exemplar = (vx_reference)vxCreateTensor(context, TENSOR_DIMS_NUM, dims, obj_item_type, 0);
-            free(dims);
+            ct_free_mem(dims);
             break;
         default:
             break;
@@ -263,7 +265,7 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                 vx_size stride = IMAGE_SIZE_X*2;
                 vx_size stride_y = sizeof(vx_coordinates2df_t) * (stride);
                 vx_size size = stride * IMAGE_SIZE_Y*2;
-                vx_coordinates2df_t* ptr_w = malloc(sizeof(vx_coordinates2df_t) * size);
+                vx_coordinates2df_t* ptr_w = ct_alloc_mem(sizeof(vx_coordinates2df_t) * size);
 
                 for (vx_size i = 0; i < IMAGE_SIZE_Y*2; i++)
                 {
@@ -276,7 +278,7 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                 }
 
                 VX_CALL(vxCopyRemapPatch(input_remap, &rect, stride_y, ptr_w, VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-                free(ptr_w);
+                ct_free_mem(ptr_w);
                 break;
             }
         case VX_TYPE_THRESHOLD:
@@ -292,7 +294,7 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                 vx_tensor input_tensor = (vx_tensor)input;
                 vx_size start[TENSOR_DIMS_NUM] = { 0 };
                 vx_size strides[TENSOR_DIMS_NUM]= { 0 };
-                vx_size * dims = malloc(TENSOR_DIMS_NUM * sizeof(vx_size));
+                vx_size * dims = ct_alloc_mem(TENSOR_DIMS_NUM * sizeof(vx_size));
                 for(vx_size i = 0; i < TENSOR_DIMS_NUM; i++)
                 {
                     dims[i] = TENSOR_DIMS_LENGTH;
@@ -300,7 +302,7 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                     strides[i] = i ? strides[i - 1] * dims[i - 1] : sizeof(vx_uint8);
                 }
                 const vx_size bytes = dims[TENSOR_DIMS_NUM - 1] * strides[TENSOR_DIMS_NUM - 1];
-                void * data = malloc(bytes);
+                void * data = ct_alloc_mem(bytes);
                 vx_uint8* u8_data = (vx_uint8*)data;
                 for(vx_size i = 0; i < bytes; i++)
                 {
@@ -308,8 +310,8 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                 }
 
                 VX_CALL(vxCopyTensorPatch(input_tensor, TENSOR_DIMS_NUM, start, dims, strides, data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-                free(dims);
-                free(data);
+                ct_free_mem(dims);
+                ct_free_mem(data);
                 break;
             }
         default:
@@ -484,7 +486,7 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                 vx_tensor output_tensor = (vx_tensor)output;
                 vx_size start[TENSOR_DIMS_NUM] = { 0 };
                 vx_size strides[TENSOR_DIMS_NUM]= { 0 };
-                vx_size * dims = malloc(TENSOR_DIMS_NUM * sizeof(vx_size));
+                vx_size * dims = ct_alloc_mem(TENSOR_DIMS_NUM * sizeof(vx_size));
                 for(vx_size i = 0; i < TENSOR_DIMS_NUM; i++)
                 {
                     dims[i] = TENSOR_DIMS_LENGTH;
@@ -492,15 +494,15 @@ TEST_WITH_ARG(Copy, testGraphProcessing, copy_arg, PARAMETERS)
                     strides[i] = i ? strides[i - 1] * dims[i - 1] : sizeof(vx_uint8);
                 }
                 const vx_size bytes = dims[TENSOR_DIMS_NUM - 1] * strides[TENSOR_DIMS_NUM - 1];
-                void * data = malloc(bytes);
+                void * data = ct_alloc_mem(bytes);
                 VX_CALL(vxCopyTensorPatch(output_tensor, TENSOR_DIMS_NUM, start, dims, strides, data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
                 vx_uint8* u8_data = (vx_uint8*)data;
                 for(vx_size i = 0; i < bytes; i++)
                 {
                     ASSERT(u8_data[i] == 2);
                 }
-                free(dims);
-                free(data);
+                ct_free_mem(dims);
+                ct_free_mem(data);
                 break;
             }
         default:
@@ -640,7 +642,7 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                 vx_size stride = IMAGE_SIZE_X*2;
                 vx_size stride_y = sizeof(vx_coordinates2df_t) * (stride);
                 vx_size size = stride * IMAGE_SIZE_Y*2;
-                vx_coordinates2df_t* ptr_w = malloc(sizeof(vx_coordinates2df_t) * size);
+                vx_coordinates2df_t* ptr_w = ct_alloc_mem(sizeof(vx_coordinates2df_t) * size);
 
                 for (vx_size i = 0; i < IMAGE_SIZE_Y*2; i++)
                 {
@@ -653,7 +655,7 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                 }
 
                 VX_CALL(vxCopyRemapPatch(input_remap, &rect, stride_y, ptr_w, VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-                free(ptr_w);
+                ct_free_mem(ptr_w);
                 break;
             }
         case VX_TYPE_TENSOR:
@@ -661,7 +663,7 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                 vx_tensor input_tensor = (vx_tensor)input;
                 vx_size start[TENSOR_DIMS_NUM] = { 0 };
                 vx_size strides[TENSOR_DIMS_NUM]= { 0 };
-                vx_size * dims = malloc(TENSOR_DIMS_NUM * sizeof(vx_size));
+                vx_size * dims = ct_alloc_mem(TENSOR_DIMS_NUM * sizeof(vx_size));
                 for(vx_size i = 0; i < TENSOR_DIMS_NUM; i++)
                 {
                     dims[i] = TENSOR_DIMS_LENGTH;
@@ -669,7 +671,7 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                     strides[i] = i ? strides[i - 1] * dims[i - 1] : sizeof(vx_uint8);
                 }
                 const vx_size bytes = dims[TENSOR_DIMS_NUM - 1] * strides[TENSOR_DIMS_NUM - 1];
-                void * data = malloc(bytes);
+                void * data = ct_alloc_mem(bytes);
                 vx_uint8* u8_data = (vx_uint8*)data;
                 for(vx_size i = 0; i < bytes; i++)
                 {
@@ -677,8 +679,8 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                 }
 
                 VX_CALL(vxCopyTensorPatch(input_tensor, TENSOR_DIMS_NUM, start, dims, strides, data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-                free(dims);
-                free(data);
+                ct_free_mem(dims);
+                ct_free_mem(data);
                 break;
             }
         default:
@@ -693,7 +695,6 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
         case VX_TYPE_IMAGE:
             {
             vx_image output_image = (vx_image)output;
-            int i;
             void *p = NULL;
             vx_map_id output_map_id;
             vx_rectangle_t rect;
@@ -849,7 +850,7 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                 vx_tensor output_tensor = (vx_tensor)output;
                 vx_size start[TENSOR_DIMS_NUM] = { 0 };
                 vx_size strides[TENSOR_DIMS_NUM]= { 0 };
-                vx_size * dims = malloc(TENSOR_DIMS_NUM * sizeof(vx_size));
+                vx_size * dims = ct_alloc_mem(TENSOR_DIMS_NUM * sizeof(vx_size));
                 for(vx_size i = 0; i < TENSOR_DIMS_NUM; i++)
                 {
                     dims[i] = TENSOR_DIMS_LENGTH;
@@ -857,15 +858,15 @@ TEST_WITH_ARG(Copy, testImmediateProcessing, copy_arg, PARAMETERS)
                     strides[i] = i ? strides[i - 1] * dims[i - 1] : sizeof(vx_uint8);
                 }
                 const vx_size bytes = dims[TENSOR_DIMS_NUM - 1] * strides[TENSOR_DIMS_NUM - 1];
-                void * data = malloc(bytes);
+                void * data = ct_alloc_mem(bytes);
                 VX_CALL(vxCopyTensorPatch(output_tensor, TENSOR_DIMS_NUM, start, dims, strides, data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
                 vx_uint8* u8_data = (vx_uint8*)data;
                 for(vx_size i = 0; i < bytes; i++)
                 {
                     ASSERT(u8_data[i] == 2);
                 }
-                free(dims);
-                free(data);
+                ct_free_mem(dims);
+                ct_free_mem(data);
                 break;
             }
         default:
@@ -882,13 +883,4 @@ TESTCASE_TESTS(Copy,
     testImmediateProcessing
 )
 
-
-
-
-
-
-
-
-
-
-
+#endif //OPENVX_USE_ENHANCED_VISION

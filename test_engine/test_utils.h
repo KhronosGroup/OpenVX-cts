@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -19,7 +19,6 @@
 #define __VX_CT_TEST_UTILS_H__
 
 #include <VX/vx.h>
-#include <VX/vx_compatibility.h>
 
 #define MAXPATHLENGTH           (512u)
 
@@ -145,6 +144,12 @@ void ct_release_global_vx_context();
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=127", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 127 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} }))
 
+#define ADD_VX_BORDERS_U1(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_UNDEFINED", __VA_ARGS__, { VX_BORDER_UNDEFINED, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_REPLICATE", __VA_ARGS__, { VX_BORDER_REPLICATE, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=1", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 1 }} }))
+
 #define ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY(testArgName, nextmacro, ...) \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_UNDEFINED", __VA_ARGS__, { VX_BORDER_UNDEFINED, {{ 0 }} })), \
     CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_REPLICATE", __VA_ARGS__, { VX_BORDER_REPLICATE, {{ 0 }} })), \
@@ -152,6 +157,23 @@ void ct_release_global_vx_context();
     CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_CONSTANT=1", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 1 }} })), \
     CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_CONSTANT=127", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 127 }} })), \
     CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} }))
+
+#define ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_UNDEFINED", __VA_ARGS__, { VX_BORDER_UNDEFINED, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_REPLICATE", __VA_ARGS__, { VX_BORDER_REPLICATE, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_CONSTANT=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/DISABLED_VX_BORDER_CONSTANT=1", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 1 }} }))
+
+#define ADD_TYPE_U1(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U1", __VA_ARGS__, VX_DF_IMAGE_U1))
+
+#define ADD_TYPE_U8(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U8", __VA_ARGS__, VX_DF_IMAGE_U8))
+
+#define ADD_VALID_REGION_SHRINKS(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/REGION_SHRINK=1", __VA_ARGS__, {1, 1, -1, -1})), \
+    CT_EXPAND(nextmacro(testArgName "/REGION_SHRINK=7", __VA_ARGS__, {7, 7, -7, -7})), \
+    CT_EXPAND(nextmacro(testArgName "/REGION_SHRINK=odd", __VA_ARGS__, {1, 2, -3, -4}))
 
 void ct_fill_image_random_impl(vx_image image, uint64_t* seed, const char* func, const char* file, const int line);
 #define ct_fill_image_random(image, seed) ct_fill_image_random_impl(image, seed, __FUNCTION__, __FILE__, __LINE__)
@@ -171,10 +193,19 @@ struct InputGenerator
     vx_image (*generator)(vx_context context, const char* fileName);
 };
 
+#define ALTERRECTANGLE(rectangle, dsx, dsy, dex, dey) \
+{ \
+    rectangle.start_x += dsx; \
+    rectangle.start_y += dsy; \
+    rectangle.end_x   += dex; \
+    rectangle.end_y   += dey; \
+} \
 
 vx_status ct_dump_vx_image_info(vx_image image);
 
 uint32_t ct_floor_u32_no_overflow(float v);
+
+int ct_div_floor(int x, int y);
 
 #define CT_RNG_INIT(rng, seed) ((rng) = (seed) ? (seed) : (uint64_t)(int64_t)(-1))
 #define CT_RNG_NEXT(rng) ((rng) = ((uint64_t)(uint32_t)(rng)*4164903690U + ((rng) >> 32)))
@@ -182,12 +213,14 @@ uint32_t ct_floor_u32_no_overflow(float v);
 #define CT_RNG_NEXT_BOOL(rng)      CT_RNG_NEXT_INT(rng, 0, 2)
 #define CT_RNG_NEXT_REAL(rng, a, b) ((uint32_t)CT_RNG_NEXT(rng)*(2.3283064365386963e-10*((b) - (a))) + (a))
 
+#define CT_CAST_U1(x)  (uint8_t)((x) < 0 ? 0 : (x) > 1 ? 1 : (x))
 #define CT_CAST_U8(x)  (uint8_t)((x) < 0 ? 0 : (x) > 255 ? 255 : (x))
 #define CT_CAST_U16(x) (uint16_t)((x) < 0 ? 0 : (x) > 65535 ? 65535 : (x))
 #define CT_CAST_S16(x) (int16_t)((x) < -32768 ? -32768 : (x) > 32767 ? 32767 : (x))
 #define CT_CAST_U32(x) (uint32_t)((x) < 0 ? 0 : (x))
 #define CT_CAST_S32(x) (int32_t)(x)
 
+#define CT_SATURATE_U1(x) CT_CAST_U1(x)
 #define CT_SATURATE_U8(x) CT_CAST_U8(x)
 #define CT_SATURATE_U16(x) CT_CAST_U16(x)
 #define CT_SATURATE_S16(x) CT_CAST_S16(x)
@@ -215,11 +248,13 @@ void ct_set_check_any_size(int flag);
 
 void ct_destroy_vx_context(void **pContext);
 
-char *ct_get_test_file_path();
+const char *ct_get_test_file_path();
 
 void *ct_alloc_mem(size_t size);
 
 void ct_free_mem(void *ptr);
+
+void ct_delay_ms(uint32_t ms);
 
 void ct_memset(void *ptr, vx_uint8 c, size_t);
 void *ct_calloc(size_t nmemb, size_t size);

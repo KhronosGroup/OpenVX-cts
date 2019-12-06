@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
 #ifdef OPENVX_USE_NN_16
 
 #include "test_tensor_util.h"
@@ -220,7 +221,7 @@ TEST(TensorNetworks, AlexNetTestNetwork)
     graph = vxCreateGraph(context);
     status |= vxGetStatus((vx_reference)graph);
     if(status == VX_SUCCESS)
-    {        
+    {
         /*
          * List of nodes to define a graph partition to create (use for debug purposes)
          * Note: 1) If the list is empty, the entire graph will be created
@@ -319,13 +320,13 @@ TEST(TensorNetworks, AlexNetTestNetwork)
     if(graph)
     {
         // Release OpenVX graph
-        status = vxReleaseGraph(&graph);        
+        status = vxReleaseGraph(&graph);
         if(status != VX_SUCCESS)
         {
             WriteLog("ERROR: failed to release graph (vx_status=%s)\n", getVxStatusDesc(status));
         }
     }
-    
+
     VX_CALL(status);
     if (correct_detections < min_correct_alexnet)
     {
@@ -362,3 +363,4 @@ TESTCASE_TESTS(TensorNetworks,
 //    FCN
 )
 #endif
+#endif//OPENVX_CONFORMANCE_NEURAL_NETWORKS

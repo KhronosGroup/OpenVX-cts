@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -19,6 +19,8 @@
 #include <VX/vx.h>
 #include <VX/vxu.h>
 #include <string.h>
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 TESTCASE(SmokeTest, CT_VXContext, ct_setup_vx_context, 0)
 
@@ -78,38 +80,6 @@ TEST(SmokeTest, test_vxReleaseReference)
     vx_uint32 ref_count0 = 0;
     vx_uint32 ref_count1 = 0;
     vx_reference ref = 0;
-
-    {
-        /* test context reference */
-        ref = (vx_reference)context;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
-        VX_CALL(vxRetainReference(ref));
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
-        VX_CALL(vxReleaseReference(&ref));
-        ref = (vx_reference)context;
-        ref_count1 = 0;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
-    }
-
-    {
-        /* test graph reference */
-        vx_graph graph = 0;
-        EXPECT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
-        ref = (vx_reference)graph;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
-        VX_CALL(vxRetainReference(ref));
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
-        VX_CALL(vxReleaseReference(&ref));
-        ref = (vx_reference)graph;
-        ref_count1 = 0;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
-
-        VX_CALL(vxReleaseGraph(&graph));
-    }
 
     {
         /* test node reference */
@@ -232,24 +202,6 @@ TEST(SmokeTest, test_vxReleaseReference)
     }
 
     {
-        /* test graph reference */
-        vx_graph graph = 0;
-        EXPECT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
-        ref = (vx_reference)graph;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
-        VX_CALL(vxRetainReference(ref));
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
-        VX_CALL(vxReleaseReference(&ref));
-        ref = (vx_reference)graph;
-        ref_count1 = 0;
-        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
-        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
-
-        VX_CALL(vxReleaseGraph(&graph));
-    }
-
-    {
         /* test matrix reference */
         vx_matrix matrix = 0;
         EXPECT_VX_OBJECT(matrix = vxCreateMatrix(context, VX_TYPE_FLOAT32, 32, 32), VX_TYPE_MATRIX);
@@ -325,7 +277,7 @@ TEST(SmokeTest, test_vxReleaseReference)
     {
         /* test threshold reference */
         vx_threshold threshold = 0;
-        EXPECT_VX_OBJECT(threshold = vxCreateThreshold(context, VX_THRESHOLD_TYPE_BINARY, VX_TYPE_UINT8), VX_TYPE_THRESHOLD);
+        EXPECT_VX_OBJECT(threshold = vxCreateThresholdForImage(context, VX_THRESHOLD_TYPE_BINARY, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8), VX_TYPE_THRESHOLD);
         ref = (vx_reference)threshold;
         ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
         VX_CALL(vxRetainReference(ref));
@@ -406,120 +358,48 @@ TEST(SmokeTest, test_vxReleaseReference)
 TEST(SmokeTest, test_vxRetainReference)
 {
     vx_image image = 0;
-    vx_graph graph = 0;
-    vx_reference image_ref = 0, graph_ref = 0;
-    vx_uint32 image_count = 0, graph_count = 0;
+    vx_reference image_ref = 0;
+    vx_uint32 image_count = 0;
     vx_context context = context_->vx_context_;
     vx_uint32 num_refs1 = 0, num_refs2 = 0, num_refs3 = 0, num_refs4 = 0;
 
     ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs1, sizeof(num_refs1)), VX_SUCCESS);
 
     ASSERT_VX_OBJECT(image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
 
     ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs2, sizeof(num_refs2)), VX_SUCCESS);
-    ASSERT_EQ_INT(num_refs2, num_refs1+2);
+    ASSERT_EQ_INT(num_refs2, num_refs1+1);
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     ASSERT_EQ_VX_STATUS(vxQueryReference(image_ref, VX_REFERENCE_COUNT, (void*)&image_count, sizeof(image_count)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
     ASSERT_EQ_INT(image_count, 1);
-    ASSERT_EQ_INT(graph_count, 1);
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     VX_CALL(vxRetainReference(image_ref));
-    VX_CALL(vxRetainReference(graph_ref));
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     ASSERT_EQ_VX_STATUS(vxQueryReference(image_ref, VX_REFERENCE_COUNT, (void*)&image_count, sizeof(image_count)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
     ASSERT_EQ_INT(image_count, 2);
-    ASSERT_EQ_INT(graph_count, 2);
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     VX_CALL(vxReleaseReference(&image_ref));
-    VX_CALL(vxReleaseReference(&graph_ref));
 
     ASSERT_EQ_PTR(0, image_ref);
-    ASSERT_EQ_PTR(0, graph_ref);
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     ASSERT_EQ_VX_STATUS(vxQueryReference(image_ref, VX_REFERENCE_COUNT, (void*)&image_count, sizeof(image_count)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
     ASSERT_EQ_INT(image_count, 1);
-    ASSERT_EQ_INT(graph_count, 1);
 
     ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs3, sizeof(num_refs3)), VX_SUCCESS);
-    ASSERT_EQ_INT(num_refs3, num_refs1+2);
+    ASSERT_EQ_INT(num_refs3, num_refs1+1);
 
     image_ref = (vx_reference)image;
-    graph_ref = (vx_reference)graph;
     VX_CALL(vxReleaseReference(&image_ref));
-    VX_CALL(vxReleaseReference(&graph_ref));
 
     ASSERT_EQ_PTR(0, image_ref);
-    ASSERT_EQ_PTR(0, graph_ref);
 
     ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs4, sizeof(num_refs4)), VX_SUCCESS);
     ASSERT_EQ_INT(num_refs4, num_refs1);
-}
-
-TEST(SmokeTest, test_vxUnloadKernels)
-{
-    vx_context context = context_->vx_context_;
-    vx_kernel kernel = NULL;
-    vx_int32 num_modules1;
-    vx_int32 num_modules2;
-    vx_int32 num_unique_kernels1;
-    vx_int32 num_unique_kernels2;
-
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules1, sizeof(num_modules1)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels1, sizeof(num_unique_kernels1)), VX_SUCCESS);
-    ASSERT(num_modules1 >= 0u);
-    ASSERT(num_unique_kernels1 > 0u);
-
-    kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
-    ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)kernel));
-
-    VX_CALL(vxLoadKernels(context, "test-testmodule"));
-    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.test.testmodule"), VX_TYPE_KERNEL);
-    VX_CALL(vxReleaseKernel(&kernel));
-
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules2, sizeof(num_modules1)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels2, sizeof(num_unique_kernels2)), VX_SUCCESS);
-    ASSERT(num_modules2 > num_modules1);
-    ASSERT(num_unique_kernels2 > num_unique_kernels1);
-
-    VX_CALL(vxUnloadKernels(context, "test-testmodule"));
-
-    kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
-    ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)kernel));
-
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules2, sizeof(num_modules1)), VX_SUCCESS);
-    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels2, sizeof(num_unique_kernels2)), VX_SUCCESS);
-    ASSERT(num_modules2 == num_modules1);
-    ASSERT(num_unique_kernels2 == num_unique_kernels1);
-}
-
-TEST(SmokeTest, test_vxSetReferenceName)
-{
-    vx_context context = context_->vx_context_;
-
-    vx_image image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8);
-    const char* image_name = "Image";
-    char* actual_name = NULL;
-
-    VX_CALL(vxSetReferenceName((vx_reference)image, image_name));
-    VX_CALL(vxQueryReference((vx_reference)image, VX_REFERENCE_NAME, &actual_name, sizeof(actual_name)));
-
-    ASSERT(0 == strcmp(image_name, actual_name));
-
-    VX_CALL(vxReleaseImage(&image));
 }
 
 TEST(SmokeTest, test_vxSetParameterByIndex)
@@ -576,12 +456,389 @@ TEST(SmokeTest, test_vxSetParameterByIndex)
     VX_CALL(vxReleaseGraph(&graph));
 }
 
+TEST(SmokeTest, test_vxSetParameterByReference)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_kernel kernel = 0;
+    vx_node node = 0;
+    vx_uint32 num_params = 0;
+    vx_parameter parameter = 0;
+    vx_image p_image = 0;
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByEnum(context, VX_KERNEL_BOX_3x3), VX_TYPE_KERNEL);
+    VX_CALL(vxQueryKernel(kernel, VX_KERNEL_PARAMETERS, &num_params, sizeof(num_params)));
+    ASSERT_EQ_INT(2, num_params);
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)src_image));
+
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 0), VX_TYPE_PARAMETER);
+    VX_CALL(vxQueryParameter(parameter, VX_PARAMETER_REF, &p_image, sizeof(p_image)));
+    ASSERT(p_image == src_image);
+    VX_CALL(vxReleaseImage(&p_image));
+    VX_CALL(vxReleaseParameter(&parameter));
+
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 1), VX_TYPE_PARAMETER);
+    VX_CALL(vxQueryParameter(parameter, VX_PARAMETER_REF, &p_image, sizeof(p_image)));
+    ASSERT(p_image != dst_image);
+    VX_CALL(vxSetParameterByReference(parameter, (vx_reference)dst_image));
+    VX_CALL(vxQueryParameter(parameter, VX_PARAMETER_REF, &p_image, sizeof(p_image)));
+    ASSERT(p_image == dst_image);
+
+    VX_CALL(vxReleaseImage(&p_image));
+    VX_CALL(vxReleaseParameter(&parameter));
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+    VX_CALL(vxReleaseNode(&node));
+    VX_CALL(vxReleaseKernel(&kernel));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node == 0);
+    ASSERT(kernel == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TEST(SmokeTest, test_vxGetParameterByIndex)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0;
+    vx_graph graph = 0;
+    vx_kernel kernel = 0;
+    vx_node node = 0;
+    vx_uint32 num_params = 0;
+    vx_parameter parameter = 0;
+    vx_image p_image = 0;
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByEnum(context, VX_KERNEL_BOX_3x3), VX_TYPE_KERNEL);
+    VX_CALL(vxQueryKernel(kernel, VX_KERNEL_PARAMETERS, &num_params, sizeof(num_params)));
+    ASSERT_EQ_INT(2, num_params);
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)src_image));
+
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 0), VX_TYPE_PARAMETER);
+    VX_CALL(vxQueryParameter(parameter, VX_PARAMETER_REF, &p_image, sizeof(p_image)));
+    ASSERT(p_image == src_image);
+    VX_CALL(vxReleaseImage(&p_image));
+    VX_CALL(vxReleaseParameter(&parameter));
+
+    VX_CALL(vxReleaseNode(&node));
+    VX_CALL(vxReleaseKernel(&kernel));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node == 0);
+    ASSERT(kernel == 0);
+    ASSERT(graph == 0);
+    ASSERT(src_image == 0);
+}
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
+
+TESTCASE(SmokeTestBase, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(SmokeTestBase, test_vxReleaseReferenceBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_uint32 ref_count0 = 0;
+    vx_uint32 ref_count1 = 0;
+    vx_reference ref = 0;
+
+    {
+        /* test context reference */
+        ref = (vx_reference)context;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+        VX_CALL(vxRetainReference(ref));
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+        VX_CALL(vxReleaseReference(&ref));
+        ref = (vx_reference)context;
+        ref_count1 = 0;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+    }
+
+    {
+        /* test graph reference */
+        vx_graph graph = 0;
+        EXPECT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+        ref = (vx_reference)graph;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+        VX_CALL(vxRetainReference(ref));
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+        VX_CALL(vxReleaseReference(&ref));
+        ref = (vx_reference)graph;
+        ref_count1 = 0;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+
+        VX_CALL(vxReleaseGraph(&graph));
+    }
+
+    {
+        /* test graph reference */
+        vx_graph graph = 0;
+        EXPECT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+        ref = (vx_reference)graph;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+        VX_CALL(vxRetainReference(ref));
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+        VX_CALL(vxReleaseReference(&ref));
+        ref = (vx_reference)graph;
+        ref_count1 = 0;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+
+        VX_CALL(vxReleaseGraph(&graph));
+    }
+
+    {
+        /* test kernel reference */
+        vx_kernel kernel = 0;
+        VX_CALL(vxLoadKernels(context, "test-testmodule"));
+        EXPECT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.test.testmodule"), VX_TYPE_KERNEL);
+        ref = (vx_reference)kernel;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+        VX_CALL(vxRetainReference(ref));
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+        VX_CALL(vxReleaseReference(&ref));
+        ref = (vx_reference)kernel;
+        ref_count1 = 0;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+
+        VX_CALL(vxReleaseKernel(&kernel));
+        VX_CALL(vxUnloadKernels(context, "test-testmodule"));
+    }
+
+    {
+        /* test parameter reference */
+        vx_kernel kernel = 0;
+        vx_parameter parameter = 0;
+        VX_CALL(vxLoadKernels(context, "test-testmodule"));
+        EXPECT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.test.testmodule"), VX_TYPE_KERNEL);
+        EXPECT_VX_OBJECT(parameter = vxGetKernelParameterByIndex(kernel, 0), VX_TYPE_PARAMETER);
+        ref = (vx_reference)parameter;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+        VX_CALL(vxRetainReference(ref));
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+        VX_CALL(vxReleaseReference(&ref));
+        ref = (vx_reference)parameter;
+        ref_count1 = 0;
+        ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+        ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+
+        VX_CALL(vxReleaseKernel(&kernel));
+        VX_CALL(vxReleaseParameter(&parameter));
+        VX_CALL(vxUnloadKernels(context, "test-testmodule"));
+    }
+
+}
+
+TEST(SmokeTestBase, test_vxLoadKernels)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+
+    VX_CALL(vxLoadKernels(context, "test-testmodule"));
+    EXPECT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.test.testmodule"), VX_TYPE_KERNEL);
+    VX_CALL(vxReleaseKernel(&kernel));
+    VX_CALL(vxUnloadKernels(context, "test-testmodule"));
+}
+
+
+TEST(SmokeTestBase, test_vxUnloadKernels)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = NULL;
+    vx_int32 num_modules1;
+    vx_int32 num_modules2;
+    vx_int32 num_unique_kernels1;
+    vx_int32 num_unique_kernels2;
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules1, sizeof(num_modules1)), VX_SUCCESS);
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels1, sizeof(num_unique_kernels1)), VX_SUCCESS);
+    ASSERT(num_modules1 >= 0u);
+    ASSERT(num_unique_kernels1 > 0u);
+
+    kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)kernel));
+
+    VX_CALL(vxLoadKernels(context, "test-testmodule"));
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.test.testmodule"), VX_TYPE_KERNEL);
+    VX_CALL(vxReleaseKernel(&kernel));
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules2, sizeof(num_modules1)), VX_SUCCESS);
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels2, sizeof(num_unique_kernels2)), VX_SUCCESS);
+    ASSERT(num_modules2 > num_modules1);
+    ASSERT(num_unique_kernels2 > num_unique_kernels1);
+
+    VX_CALL(vxUnloadKernels(context, "test-testmodule"));
+
+    kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)kernel));
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_modules2, sizeof(num_modules1)), VX_SUCCESS);
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_unique_kernels2, sizeof(num_unique_kernels2)), VX_SUCCESS);
+    ASSERT(num_modules2 == num_modules1);
+    ASSERT(num_unique_kernels2 == num_unique_kernels1);
+}
+
+TEST(SmokeTestBase, test_vxSetReferenceName)
+{
+    vx_context context = context_->vx_context_;
+
+    vx_graph graph = vxCreateGraph(context);
+    const char* graph_name = "Graph";
+    char* actual_name = NULL;
+
+    VX_CALL(vxSetReferenceName((vx_reference)graph, graph_name));
+    VX_CALL(vxQueryReference((vx_reference)graph, VX_REFERENCE_NAME, &actual_name, sizeof(actual_name)));
+
+    ASSERT(0 == strcmp(graph_name, actual_name));
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(SmokeTestBase, test_vxGetStatus)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = NULL;
+    vx_status status = VX_SUCCESS;
+
+    status = vxGetStatus((vx_reference)kernel);
+    ASSERT_EQ_INT(VX_ERROR_NO_RESOURCES, status);
+
+    kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
+    status = vxGetStatus((vx_reference)kernel);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert");
+    status = vxGetStatus((vx_reference)kernel);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+}
+
+TEST(SmokeTestBase, test_vxGetContext)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = NULL;
+    vx_context context_test = 0;
+
+    context_test = vxGetContext((vx_reference)kernel);
+    EXPECT_EQ_PTR(context_test, NULL);
+
+    kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert");
+    context_test = vxGetContext((vx_reference)kernel);
+    ASSERT_VX_OBJECT(context_test, VX_TYPE_CONTEXT);
+}
+
+TEST(SmokeTestBase, test_vxQueryReference)
+{
+    vx_context context = context_->vx_context_;
+    char* actual_name = NULL;
+    vx_status status = VX_SUCCESS;
+    vx_graph graph = 0;
+
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_NAME, &actual_name, sizeof(actual_name));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    graph = vxCreateGraph(context);
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_COUNT, &actual_name, 3);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_TYPE, &actual_name, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_NAME, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    status = vxQueryReference((vx_reference)graph, VX_TYPE_REFERENCE, &actual_name, sizeof(actual_name));
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+
+}
+
+TEST(SmokeTestBase, test_vxRetainReferenceBase)
+{
+    vx_graph graph = 0;
+    vx_reference graph_ref = 0;
+    vx_uint32 graph_count = 0;
+    vx_context context = context_->vx_context_;
+    vx_uint32 num_refs1 = 0, num_refs2 = 0, num_refs3 = 0, num_refs4 = 0;
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs1, sizeof(num_refs1)), VX_SUCCESS);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs2, sizeof(num_refs2)), VX_SUCCESS);
+    ASSERT_EQ_INT(num_refs2, num_refs1 + 1);
+
+    graph_ref = (vx_reference)graph;
+    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
+    ASSERT_EQ_INT(graph_count, 1);
+
+    graph_ref = (vx_reference)graph;
+    VX_CALL(vxRetainReference(graph_ref));
+
+    graph_ref = (vx_reference)graph;
+    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
+    ASSERT_EQ_INT(graph_count, 2);
+
+    graph_ref = (vx_reference)graph;
+    VX_CALL(vxReleaseReference(&graph_ref));
+
+    ASSERT_EQ_PTR(0, graph_ref);
+
+    graph_ref = (vx_reference)graph;
+    ASSERT_EQ_VX_STATUS(vxQueryReference(graph_ref, VX_REFERENCE_COUNT, (void*)&graph_count, sizeof(graph_count)), VX_SUCCESS);
+    ASSERT_EQ_INT(graph_count, 1);
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs3, sizeof(num_refs3)), VX_SUCCESS);
+    ASSERT_EQ_INT(num_refs3, num_refs1 + 1);
+
+    graph_ref = (vx_reference)graph;
+    VX_CALL(vxReleaseReference(&graph_ref));
+
+    ASSERT_EQ_PTR(0, graph_ref);
+
+    ASSERT_EQ_VX_STATUS(vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs4, sizeof(num_refs4)), VX_SUCCESS);
+    ASSERT_EQ_INT(num_refs4, num_refs1);
+}
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 TESTCASE_TESTS(SmokeTest,
         test_vxRegisterUserStruct,
         test_vxHint,
         test_vxReleaseReference,
         test_vxRetainReference,
+        test_vxSetParameterByIndex,
+        test_vxSetParameterByReference,
+        test_vxGetParameterByIndex
+        )
+
+#endif
+
+TESTCASE_TESTS(SmokeTestBase,
+        test_vxReleaseReferenceBase,
+        test_vxLoadKernels,
         test_vxUnloadKernels,
         test_vxSetReferenceName,
-        test_vxSetParameterByIndex
+        test_vxGetStatus,
+        test_vxGetContext,
+        test_vxQueryReference,
+        test_vxRetainReferenceBase
         )
+

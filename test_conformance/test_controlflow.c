@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_USE_ENHANCED_VISION
+
 #include <math.h>
 #include <float.h>
 #include <VX/vx.h>
@@ -80,7 +82,7 @@ static vx_reference create_reference(vx_context context, vx_enum type)
         vx_size stride = img_width*2;
         vx_size stride_y = sizeof(vx_coordinates2df_t) * (stride);
         vx_size size = stride * img_height*2;
-        vx_coordinates2df_t* ptr_w = malloc(sizeof(vx_coordinates2df_t) * size);
+        vx_coordinates2df_t* ptr_w = ct_alloc_mem(sizeof(vx_coordinates2df_t) * size);
         for (vx_size i = 0; i < img_height*2; i++)
         {
             for (vx_size j = 0; j < img_width*2; j++)
@@ -93,7 +95,7 @@ static vx_reference create_reference(vx_context context, vx_enum type)
         vxCopyRemapPatch(remap, &rect, stride_y, ptr_w, VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
 
         ref = (vx_reference)remap;
-        free(ptr_w);
+        ct_free_mem(ptr_w);
         break;
     }
     case VX_TYPE_LUT:
@@ -108,13 +110,13 @@ static vx_reference create_reference(vx_context context, vx_enum type)
         vxReleaseScalar(&scalar);
         break;
     case VX_TYPE_TENSOR:
-        dims = malloc(tensor_dims_num * sizeof(vx_size));
+        dims = ct_alloc_mem(tensor_dims_num * sizeof(vx_size));
         for(vx_size i = 0; i < tensor_dims_num; i++)
         {
             dims[i] = tensor_dims_length;
         }
         ref = (vx_reference)vxCreateTensor(context, tensor_dims_num, dims, VX_TYPE_UINT8, 0);
-        free(dims);
+        ct_free_mem(dims);
         break;
     default:
         break;
@@ -482,62 +484,62 @@ TEST_WITH_ARG(ControlFlow, testScalarOperationNode, scalar_op_arg, PARAMETERS_SC
     switch (result_type)
     {
     case VX_TYPE_CHAR:
-        VX_CALL(vxReadScalarValue(o, &o_value.chr));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.chr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.chr, o_value.chr);
         break;
 
     case VX_TYPE_INT8:
-        VX_CALL(vxReadScalarValue(o, &o_value.s08));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.s08, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.s08, o_value.s08);
         break;
 
     case VX_TYPE_UINT8:
-        VX_CALL(vxReadScalarValue(o, &o_value.u08));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.u08, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.u08, o_value.u08);
         break;
 
     case VX_TYPE_INT16:
-        VX_CALL(vxReadScalarValue(o, &o_value.s16));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.s16, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.s16, o_value.s16);
         break;
 
     case VX_TYPE_UINT16:
-        VX_CALL(vxReadScalarValue(o, &o_value.u16));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.u16, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.u16, o_value.u16);
         break;
 
     case VX_TYPE_INT32:
-        VX_CALL(vxReadScalarValue(o, &o_value.s32));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.s32, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.s32, o_value.s32);
         break;
 
     case VX_TYPE_UINT32:
-        VX_CALL(vxReadScalarValue(o, &o_value.u32));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.u32, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.u32, o_value.u32);
         break;
 
     case VX_TYPE_INT64:
-        VX_CALL(vxReadScalarValue(o, &o_value.s64));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.s64, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.s64, o_value.s64);
         break;
 
     case VX_TYPE_UINT64:
-        VX_CALL(vxReadScalarValue(o, &o_value.u64));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.u64, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.u64, o_value.u64);
         break;
 
     case VX_TYPE_FLOAT32:
-        VX_CALL(vxReadScalarValue(o, &o_value.f32));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.f32, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT(fabs(o_check.f32 - o_value.f32) < 0.000001f);
         break;
 
     case VX_TYPE_SIZE:
-        VX_CALL(vxReadScalarValue(o, &o_value.size));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.size, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.size, o_value.size);
         break;
 
     case VX_TYPE_BOOL:
-        VX_CALL(vxReadScalarValue(o, &o_value.boolean));
+        VX_CALL(vxCopyScalar(o, (void *)&o_value.boolean, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_EQ_INT(o_check.boolean, o_value.boolean);
         break;
 
@@ -560,3 +562,5 @@ TEST_WITH_ARG(ControlFlow, testScalarOperationNode, scalar_op_arg, PARAMETERS_SC
 }
 
 TESTCASE_TESTS(ControlFlow, testSelectNode, testScalarOperationNode)
+
+#endif //OPENVX_USE_ENHANCED_VISION

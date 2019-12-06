@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 #include "test_engine/test.h"
 
@@ -504,3 +506,5 @@ TEST_WITH_ARG(vxMultiply, testFuzzy, fuzzy_arg, MUL_FUZZY_ARGS(SATURATE), MUL_FU
 
 TESTCASE_TESTS(vxuMultiply, DISABLED_testNegativeFormat, DISABLED_testNegativeSizes,                testFuzzy)
 TESTCASE_TESTS(vxMultiply,  DISABLED_testNegativeFormat, DISABLED_testNegativeSizes, testInference, testFuzzy)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

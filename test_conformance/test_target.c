@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -21,10 +21,6 @@
 #include <VX/vxu.h>
 #include <VX/vx_kernels.h>
 
-
-TESTCASE(Target, CT_VXContext, ct_setup_vx_context, 0)
-
-
 typedef struct
 {
     const char* testName;
@@ -46,6 +42,12 @@ typedef struct
 
 #define SET_IMM_MODE_TARGET_PARAMETERS \
     CT_GENERATE_PARAMETERS("target", ADD_SET_TARGET_PARAMETERS, ARG, NULL)
+
+
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
+TESTCASE(Target, CT_VXContext, ct_setup_vx_context, 0)
 
 TEST_WITH_ARG(Target, testvxSetNodeTarget, SetTarget_Arg, SET_NODE_TARGET_PARAMETERS)
 {
@@ -103,8 +105,188 @@ TEST_WITH_ARG(Target, testvxSetImmediateModeTarget, SetTarget_Arg, SET_IMM_MODE_
     return;
 }
 
+#endif
+
+TESTCASE(TargetBase, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(TargetBase, testvxCreateContext)
+{
+    vx_context context = vxCreateContext();
+    ASSERT_VX_OBJECT(context, VX_TYPE_CONTEXT);
+    vxReleaseContext(&context);
+}
+
+TEST(TargetBase, testvxQueryContext)
+{
+    vx_context context = context_->vx_context_;
+    vx_status status = VX_SUCCESS;
+    vx_uint32 num_refs1 = 0;
+    char * test = (char*)ct_alloc_mem(VX_MAX_IMPLEMENTATION_NAME);
+
+    vx_context context_test = NULL;
+    status = vxQueryContext(context_test, VX_CONTEXT_REFERENCES, (void*)&num_refs1, sizeof(num_refs1));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_VENDOR_ID, test, sizeof(vx_uint16));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_VENDOR_ID, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_VERSION, test, sizeof(vx_uint16));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_VERSION, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_refs1, sizeof(num_refs1));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_MODULES, (void*)&num_refs1, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs1, sizeof(num_refs1));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_REFERENCES, (void*)&num_refs1, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_IMPLEMENTATION, (void*)test, VX_MAX_IMPLEMENTATION_NAME);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_IMPLEMENTATION, (void*)&test, VX_MAX_IMPLEMENTATION_NAME + 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS_SIZE, test, sizeof(vx_size));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS_SIZE, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, test, 2);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, NULL, 2);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_CONVOLUTION_MAX_DIMENSION, test, sizeof(vx_size));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_CONVOLUTION_MAX_DIMENSION, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_NONLINEAR_MAX_DIMENSION, test, sizeof(vx_size));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_NONLINEAR_MAX_DIMENSION, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_OPTICAL_FLOW_MAX_WINDOW_DIMENSION, test, sizeof(vx_size));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_OPTICAL_FLOW_MAX_WINDOW_DIMENSION, test, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_IMMEDIATE_BORDER, test, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_IMMEDIATE_BORDER, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_IMMEDIATE_BORDER_POLICY, test, sizeof(vx_enum));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_IMMEDIATE_BORDER_POLICY, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, (void*)&num_refs1, sizeof(num_refs1));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNELS, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_MAX_TENSOR_DIMS, test, sizeof(vx_size));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryContext(context, VX_CONTEXT_MAX_TENSOR_DIMS, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxQueryContext(context, VX_CONTEXT_UNIQUE_KERNEL_TABLE, NULL, 1);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    status = vxQueryContext(context, VX_ERROR_INVALID_TYPE, (void*)&num_refs1, sizeof(num_refs1));
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+
+    ct_free_mem(test);
+}
+
+TEST(TargetBase, testvxReleaseContext)
+{
+    vx_status status = VX_SUCCESS;
+    vx_context context_test = 0;
+
+    status = vxReleaseContext(&context_test);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    context_test = vxCreateContext();
+    ASSERT_VX_OBJECT(context_test, VX_TYPE_CONTEXT);
+    vx_border_t ptr;
+    ptr.mode = VX_BORDER_CONSTANT;
+    status = vxSetContextAttribute(context_test, VX_CONTEXT_IMMEDIATE_BORDER, &ptr, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxReleaseContext(&context_test);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+}
+
+TEST(TargetBase, testvxSetContextAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_status status = VX_SUCCESS;
+
+    vx_context context_test = 0;
+    status = vxSetContextAttribute(context_test, VX_CONTEXT_IMMEDIATE_BORDER, NULL, 0);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    status = vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, NULL, sizeof(int));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    status = vxSetContextAttribute(context, VX_CONTEXT_EXTENSIONS, NULL, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+
+    vx_border_t ptr = { 0 };
+    ptr.mode = VX_BORDER_POLICY_DEFAULT_TO_UNDEFINED;
+    status = vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &ptr, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_VALUE, status);
+
+    ptr.mode = VX_BORDER_CONSTANT;
+    status = vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &ptr, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+}
+
+TEST_WITH_ARG(TargetBase, testvxSetImmediateModeTargetBase, SetTarget_Arg, SET_IMM_MODE_TARGET_PARAMETERS)
+{
+    vx_context context = context_->vx_context_;
+    vx_status status = VX_SUCCESS;
+    char * string = "test";
+
+    vx_context context_test = 0;
+    status = vxSetImmediateModeTarget(context_test, arg_->target_enum, arg_->target_string);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    status = vxSetImmediateModeTarget(context, arg_->target_enum, arg_->target_string);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxSetImmediateModeTarget(context, VX_TARGET_STRING, string);
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+}
+
+TEST(TargetBase, testvxSetNodeTargetBase)
+{
+    vx_node node = 0;
+    vx_status status = VX_SUCCESS;
+
+    status = vxSetNodeTarget(node, VX_TARGET_ANY, "any");
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+}
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 TESTCASE_TESTS(Target,
         testvxSetNodeTarget,
         testvxSetImmediateModeTarget
+        )
+
+#endif
+
+TESTCASE_TESTS(TargetBase,
+        testvxCreateContext,
+        testvxQueryContext,
+        testvxReleaseContext,
+        testvxSetContextAttribute,
+        testvxSetImmediateModeTargetBase,
+        testvxSetNodeTargetBase
         )

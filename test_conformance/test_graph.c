@@ -18,7 +18,12 @@
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
+#include <math.h>
+#include <string.h>
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
+/* *****************testGraph tests (vision) *******************************/
 TESTCASE(Graph, CT_VXContext, ct_setup_vx_context, 0)
 
 TEST(Graph, testTwoNodes)
@@ -847,9 +852,6 @@ TEST_WITH_ARG(Graph, testKernelName, kernel_name_arg,
     ARG("org.khronos.openvx.gaussian_3x3",          VX_KERNEL_GAUSSIAN_3x3),
     ARG("org.khronos.openvx.custom_convolution",    VX_KERNEL_CUSTOM_CONVOLUTION),
     ARG("org.khronos.openvx.gaussian_pyramid",      VX_KERNEL_GAUSSIAN_PYRAMID),
-    ARG("org.khronos.openvx.accumulate",            VX_KERNEL_ACCUMULATE),
-    ARG("org.khronos.openvx.accumulate_weighted",   VX_KERNEL_ACCUMULATE_WEIGHTED),
-    ARG("org.khronos.openvx.accumulate_square",     VX_KERNEL_ACCUMULATE_SQUARE),
     ARG("org.khronos.openvx.minmaxloc",             VX_KERNEL_MINMAXLOC),
     ARG("org.khronos.openvx.convertdepth",          VX_KERNEL_CONVERTDEPTH),
     ARG("org.khronos.openvx.canny_edge_detector",   VX_KERNEL_CANNY_EDGE_DETECTOR),
@@ -867,8 +869,10 @@ TEST_WITH_ARG(Graph, testKernelName, kernel_name_arg,
     ARG("org.khronos.openvx.optical_flow_pyr_lk",   VX_KERNEL_OPTICAL_FLOW_PYR_LK),
     ARG("org.khronos.openvx.remap",                 VX_KERNEL_REMAP),
     ARG("org.khronos.openvx.halfscale_gaussian",    VX_KERNEL_HALFSCALE_GAUSSIAN),
-    ARG("org.khronos.openvx.min",                   VX_KERNEL_MIN),
-    ARG("org.khronos.openvx.max",                   VX_KERNEL_MAX),
+    ARG("org.khronos.openvx.weightedaverage",       VX_KERNEL_WEIGHTED_AVERAGE),
+    ARG("org.khronos.openvx.non_linear_filter",     VX_KERNEL_NON_LINEAR_FILTER),
+    ARG("org.khronos.openvx.laplacian_pyramid",     VX_KERNEL_LAPLACIAN_PYRAMID),
+    ARG("org.khronos.openvx.laplacian_reconstruct", VX_KERNEL_LAPLACIAN_RECONSTRUCT),
     )
 {
     vx_context context = context_->vx_context_;
@@ -893,34 +897,6 @@ TEST_WITH_ARG(Graph, testKernelName, kernel_name_arg,
     }
 
     VX_CALL(vxReleaseKernel(&kernel));
-}
-
-TEST(Graph, testAllocateUserKernelId)
-{
-    vx_context context = context_->vx_context_;
-    vx_enum   kernel_id = 0;
-
-    ASSERT_EQ_VX_STATUS(vxAllocateUserKernelId(NULL, &kernel_id), VX_ERROR_INVALID_REFERENCE);
-    ASSERT_NE_VX_STATUS(vxAllocateUserKernelId(context, NULL), VX_SUCCESS);
-
-    VX_CALL(vxAllocateUserKernelId(context, &kernel_id));
-
-    ASSERT(kernel_id >= VX_KERNEL_BASE(VX_ID_USER, 0));
-    ASSERT(kernel_id < (VX_KERNEL_BASE(VX_ID_USER, 0) + 4096));
-}
-
-TEST(Graph, testAllocateUserKernelLibraryId)
-{
-    vx_context context = context_->vx_context_;
-    vx_enum   library_id = 0;
-
-    ASSERT_EQ_VX_STATUS(vxAllocateUserKernelLibraryId(NULL, &library_id), VX_ERROR_INVALID_REFERENCE);
-    ASSERT_NE_VX_STATUS(vxAllocateUserKernelLibraryId(context, NULL), VX_SUCCESS);
-
-    VX_CALL(vxAllocateUserKernelLibraryId(context, &library_id));
-
-    ASSERT(library_id >= 1);
-    ASSERT(library_id <= 255);
 }
 
 void test_case_1(vx_context context, vx_uint32 width, vx_uint32 height)
@@ -1649,6 +1625,7 @@ static void check_replicas(vx_reference ref, vx_reference tst, vx_border_t borde
     vx_size ref_levels = 0;
     vx_size tst_levels = 0;
     vx_enum type = VX_TYPE_INVALID;
+    int roi_adj = 0;
 
     VX_CALL(vxQueryReference(ref, VX_REFERENCE_TYPE, &type, sizeof(type)));
 
@@ -1679,16 +1656,15 @@ static void check_replicas(vx_reference ref, vx_reference tst, vx_border_t borde
             {
                 if (i > 0)
                 {
-                    if (VX_SCALE_PYRAMID_ORB == scale)
+                    int next_roi_adj = ceil((double)scale*(2+roi_adj));
+
+                    if (next_roi_adj != roi_adj)
                     {
-                        ct_adjust_roi(img1, 2, 2, 2, 2);
-                        ct_adjust_roi(img2, 2, 2, 2, 2);
+                        roi_adj = roi_adj + ceil((double)(scale) * 2);
                     }
-                    else if (VX_SCALE_PYRAMID_HALF == scale)
-                    {
-                        ct_adjust_roi(img1, 1, 1, 1, 1);
-                        ct_adjust_roi(img2, 1, 1, 1, 1);
-                    }
+
+                    ct_adjust_roi(img1, roi_adj, roi_adj, roi_adj, roi_adj);
+                    ct_adjust_roi(img2, roi_adj, roi_adj, roi_adj, roi_adj);
                 }
             }
 
@@ -1858,12 +1834,17 @@ static void test_cannyedgedetector(vx_context context)
         vx_int32 val1 = 16;
         vx_int32 val2 = 32;
         vx_node node = 0;
+        vx_pixel_value_t low_pixel;
+        vx_pixel_value_t high_pixel;
+        memset(&low_pixel, 0, sizeof(low_pixel));
+        memset(&high_pixel, 0, sizeof(high_pixel));
+        low_pixel.U8 = val1;
+        high_pixel.U8 = val2;
 
         ASSERT_VX_OBJECT(src = vxCreateImage(context, 320, 240, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
         ASSERT_VX_OBJECT(dst = vxCreateImage(context, 320, 240, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
-        ASSERT_VX_OBJECT(threshold = vxCreateThreshold(context, VX_THRESHOLD_TYPE_RANGE, VX_TYPE_UINT8), VX_TYPE_THRESHOLD);
-        VX_CALL(vxSetThresholdAttribute(threshold, VX_THRESHOLD_THRESHOLD_LOWER, &val1, sizeof(val1)));
-        VX_CALL(vxSetThresholdAttribute(threshold, VX_THRESHOLD_THRESHOLD_UPPER, &val2, sizeof(val2)));
+        ASSERT_VX_OBJECT(threshold = vxCreateThresholdForImage(context, VX_THRESHOLD_TYPE_RANGE, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8), VX_TYPE_THRESHOLD);
+        VX_CALL(vxCopyThresholdRange(threshold, &low_pixel, &high_pixel, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
         ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
         ASSERT_VX_OBJECT(node = vxCannyEdgeDetectorNode(graph, src, threshold, 3, VX_NORM_L1, dst), VX_TYPE_NODE);
 
@@ -2336,6 +2317,1779 @@ TEST(Graph, testGraphState)
     ASSERT(dst_image == 0); ASSERT(interm_image == 0); ASSERT(src_image == 0);
 }
 
+TEST(Graph, testvxIsGraphVerified)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, interm_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0;
+    vx_bool is_verified = vx_false_e;
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(interm_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src_image, interm_image), VX_TYPE_NODE);
+    VX_CALL(vxVerifyGraph(graph));
+    is_verified = vxIsGraphVerified(graph);
+    ASSERT_EQ_INT(is_verified, vx_true_e);
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&interm_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(interm_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TEST(Graph, testvxProcessGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, interm_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0;
+
+    VX_CALL(vxDirective((vx_reference)context, VX_DIRECTIVE_ENABLE_PERFORMANCE));
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(interm_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src_image, interm_image), VX_TYPE_NODE);
+
+    VX_CALL(vxVerifyGraph(graph));
+    ASSERT_EQ_INT(VX_SUCCESS, vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&interm_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(interm_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TEST(Graph, testvxWaitGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, interm_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0, node2 = 0;
+    vx_border_t border = { VX_BORDER_UNDEFINED };
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(interm_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src_image, interm_image), VX_TYPE_NODE);
+    VX_CALL(vxSetNodeAttribute(node1, VX_NODE_BORDER, &border, sizeof(border)));
+    ASSERT_VX_OBJECT(node2 = vxIntegralImageNode(graph, interm_image, dst_image), VX_TYPE_NODE);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxScheduleGraph(graph));
+    VX_CALL(vxWaitGraph(graph));
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseNode(&node2));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&interm_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0); ASSERT(node2 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0); ASSERT(interm_image == 0); ASSERT(src_image == 0);
+}
+
+TEST(Graph, testvxVerifyGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src1_image = 0, src2_image = 0, interm_image = 0, dst_image = 0, dst2_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0, node2 = 0;
+    vx_scalar scale = 0;
+    vx_scalar scale2 = 0;
+    float alpha = 2.0f;
+    int val = 1;
+    vx_status status;
+
+    ASSERT_VX_OBJECT(src1_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(interm_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst2_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(scale = vxCreateScalar(context, VX_TYPE_FLOAT32, &alpha), VX_TYPE_SCALAR);
+    ASSERT_VX_OBJECT(scale2 = vxCreateScalar(context, VX_TYPE_INT32, &val), VX_TYPE_SCALAR);
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src1_image, dst_image), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(node2 = vxMedian3x3Node(graph, src2_image, dst_image), VX_TYPE_NODE);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_MULTIPLE_WRITERS, status);
+
+    VX_CALL(vxRemoveNode(&node2));
+    ASSERT(node2 == 0);
+    VX_CALL(vxRemoveNode(&node1));
+    ASSERT(node1 == 0);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src1_image, dst_image), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(node2 = vxMedian3x3Node(graph, dst_image, src1_image), VX_TYPE_NODE);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_GRAPH, status);
+
+    VX_CALL(vxRemoveNode(&node2));
+    ASSERT(node2 == 0);
+    VX_CALL(vxRemoveNode(&node1));
+    ASSERT(node1 == 0);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src1_image, src2_image), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(node2 = vxIntegralImageNode(graph, src2_image, interm_image), VX_TYPE_NODE);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_FORMAT, status);
+
+    VX_CALL(vxRemoveNode(&node2));
+    ASSERT(node2 == 0);
+    VX_CALL(vxRemoveNode(&node1));
+    ASSERT(node1 == 0);
+    ASSERT_VX_OBJECT(node1 = vxWeightedAverageNode(graph, src1_image, scale, src2_image, dst_image), VX_TYPE_NODE);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_VALUE, status);
+
+    VX_CALL(vxRemoveNode(&node1));
+    ASSERT(node1 == 0);
+    ASSERT_VX_OBJECT(node1 = vxWeightedAverageNode(graph, src1_image, scale2, src2_image, dst_image), VX_TYPE_NODE);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_TYPE, status);
+
+    VX_CALL(vxRemoveNode(&node1));
+    ASSERT(node1 == 0);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src1_image, interm_image), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(node2 = vxIntegralImageNode(graph, interm_image, dst2_image), VX_TYPE_NODE);
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseNode(&node2));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&dst2_image));
+    VX_CALL(vxReleaseImage(&src1_image));
+    VX_CALL(vxReleaseImage(&src2_image));
+    VX_CALL(vxReleaseImage(&interm_image));
+    VX_CALL(vxReleaseScalar(&scale));
+    VX_CALL(vxReleaseScalar(&scale2));
+
+    ASSERT(node1 == 0); ASSERT(node2 == 0);
+    ASSERT(graph == 0);
+    ASSERT(scale == 0); ASSERT(scale2 == 0);
+    ASSERT(dst_image == 0); ASSERT(dst2_image == 0); ASSERT(src1_image == 0); ASSERT(src2_image == 0); ASSERT(interm_image == 0);
+}
+
+TEST(Graph, testvxQueryNode)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0;
+    vx_perf_t perf;
+    vx_status node_status = VX_SUCCESS;
+    vx_status status = VX_SUCCESS;
+    vx_border_t border = { VX_BORDER_UNDEFINED };
+    vx_border_t border_test = { 0 };
+
+    VX_CALL(vxDirective((vx_reference)context, VX_DIRECTIVE_ENABLE_PERFORMANCE));
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxIntegralImageNode(graph, src_image, dst_image), VX_TYPE_NODE);
+    VX_CALL(vxSetNodeAttribute(node1, VX_NODE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    status = vxQueryNode(node1, VX_NODE_PERFORMANCE, &perf, sizeof(perf));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryNode(node1, VX_NODE_STATUS, &node_status, sizeof(node_status));
+    ASSERT_EQ_INT(VX_SUCCESS, node_status);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryNode(node1, VX_NODE_BORDER, &node_status, sizeof(node_status));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    status = vxQueryNode(node1, VX_NODE_BORDER, &border_test, sizeof(border_test));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    ASSERT_EQ_INT(VX_BORDER_UNDEFINED, border_test.mode);
+
+    ASSERT(perf.num == 1);
+    ASSERT(perf.beg > 0);
+    ASSERT(perf.min > 0);
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TEST(Graph, testvxReleaseNode)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0;
+    vx_status status = VX_SUCCESS;
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxIntegralImageNode(graph, src_image, dst_image), VX_TYPE_NODE);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    status = vxReleaseNode(&node1);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TEST(Graph, testvxSetNodeAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, interm_image = 0, dst_image = 0;
+    vx_graph graph = 0;
+    vx_node node1 = 0, node2 = 0;
+    vx_border_t border = { VX_BORDER_UNDEFINED };
+    vx_border_t border_test = { 0 };
+    vx_status status = VX_SUCCESS;
+
+    ASSERT_VX_OBJECT(src_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(interm_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U32), VX_TYPE_IMAGE);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node1 = vxBox3x3Node(graph, src_image, interm_image), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(node2 = vxIntegralImageNode(graph, interm_image, dst_image), VX_TYPE_NODE);
+    status = vxSetNodeAttribute(node1, VX_NODE_BORDER, &border, sizeof(border));
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    status = vxQueryNode(node1, VX_NODE_BORDER, &border_test, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_BORDER_UNDEFINED, border_test.mode);
+
+    VX_CALL(vxReleaseNode(&node1));
+    VX_CALL(vxReleaseNode(&node2));
+    VX_CALL(vxReleaseGraph(&graph));
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&interm_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(node1 == 0); ASSERT(node2 == 0);
+    ASSERT(graph == 0);
+    ASSERT(dst_image == 0); ASSERT(interm_image == 0); ASSERT(src_image == 0);
+}
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
+/* *****************testGraphBase tests*******************************/
+TESTCASE(GraphBase, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(GraphBase, testAllocateUserKernelId)
+{
+    vx_context context = context_->vx_context_;
+    vx_enum   kernel_id = 0;
+
+    ASSERT_EQ_VX_STATUS(vxAllocateUserKernelId(NULL, &kernel_id), VX_ERROR_INVALID_REFERENCE);
+    ASSERT_NE_VX_STATUS(vxAllocateUserKernelId(context, NULL), VX_SUCCESS);
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_id));
+
+    ASSERT(kernel_id >= VX_KERNEL_BASE(VX_ID_USER, 0));
+    ASSERT(kernel_id < (VX_KERNEL_BASE(VX_ID_USER, 0) + 4096));
+}
+
+TEST(GraphBase, testAllocateUserKernelLibraryId)
+{
+    vx_context context = context_->vx_context_;
+    vx_enum   library_id = 0;
+
+    ASSERT_EQ_VX_STATUS(vxAllocateUserKernelLibraryId(NULL, &library_id), VX_ERROR_INVALID_REFERENCE);
+    ASSERT_NE_VX_STATUS(vxAllocateUserKernelLibraryId(context, NULL), VX_SUCCESS);
+
+    VX_CALL(vxAllocateUserKernelLibraryId(context, &library_id));
+
+    ASSERT(library_id >= 1);
+    ASSERT(library_id <= 255);
+}
+
+TEST(GraphBase, testGetUserStructNameByEnum)
+{
+    vx_context context = context_->vx_context_;
+    vx_char* type_name = "VX_TYPE_CHAR";
+    vx_enum user_struct_type = vxRegisterUserStructWithName(context, VX_MAX_REFERENCE_NAME, type_name);
+    vx_char out_name[VX_MAX_REFERENCE_NAME];
+
+    ASSERT_EQ_VX_STATUS(vxGetUserStructNameByEnum(NULL, user_struct_type, type_name, VX_MAX_REFERENCE_NAME), VX_ERROR_INVALID_PARAMETERS);
+    ASSERT_EQ_VX_STATUS(vxGetUserStructNameByEnum(context, VX_TYPE_ERROR, type_name, VX_MAX_REFERENCE_NAME), VX_FAILURE);
+    ASSERT_EQ_VX_STATUS(vxGetUserStructNameByEnum(context, user_struct_type, type_name, 0), VX_ERROR_NO_MEMORY);
+    ASSERT_EQ_VX_STATUS(vxGetUserStructNameByEnum(context, user_struct_type, out_name, VX_MAX_REFERENCE_NAME), VX_SUCCESS);
+    int ret = strncmp(type_name, out_name, strlen(type_name));
+    ASSERT_EQ_VX_STATUS(ret, 0);
+}
+
+TEST(GraphBase, testGetUserStructEnumByName)
+{
+    vx_context context = context_->vx_context_;
+    vx_char* type_name = "VX_TYPE_CHAR";
+    vx_enum user_struct_type = vxRegisterUserStructWithName(context, VX_MAX_REFERENCE_NAME, type_name);
+    vx_enum out_type;
+
+    ASSERT_EQ_VX_STATUS(vxGetUserStructEnumByName(context, NULL, &user_struct_type), VX_FAILURE);
+    ASSERT_EQ_VX_STATUS(vxGetUserStructEnumByName(context, type_name, &out_type), VX_SUCCESS);
+    ASSERT_EQ_VX_STATUS(out_type, user_struct_type);
+}
+
+TEST(GraphBase, testRegisterUserStructWithName)
+{
+    vx_context context = context_->vx_context_;
+    vx_char* type_name = "VX_TYPE_CHAR";
+
+    ASSERT_EQ_VX_STATUS(vxRegisterUserStructWithName(NULL, VX_MAX_REFERENCE_NAME, type_name), VX_TYPE_INVALID);
+    ASSERT_EQ_VX_STATUS(vxRegisterUserStructWithName(context, 0, type_name), VX_TYPE_INVALID);
+    ASSERT_NE_VX_STATUS(vxRegisterUserStructWithName(context, VX_MAX_REFERENCE_NAME, type_name), VX_TYPE_INVALID);
+}
+
+TEST(GraphBase, testvxCreateGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+
+    graph = vxCreateGraph(context_test);
+    ASSERT_EQ_PTR(graph, NULL);
+    graph = vxCreateGraph(context);
+    ASSERT_VX_OBJECT(graph, VX_TYPE_GRAPH);
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxIsGraphVerifiedBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+    vx_bool is_verified = vx_false_e;
+
+    graph = vxCreateGraph(context_test);
+    is_verified = vxIsGraphVerified(graph);
+    ASSERT_EQ_INT(is_verified, vx_false_e);
+    graph = vxCreateGraph(context);
+    is_verified = vxIsGraphVerified(graph);
+    ASSERT_EQ_INT(is_verified, vx_false_e);
+    vx_status status = vxVerifyGraph(graph);
+    if (status == VX_SUCCESS)
+    {
+        is_verified = vxIsGraphVerified(graph);
+        ASSERT_EQ_INT(is_verified, vx_true_e);
+    }
+    if (status != VX_SUCCESS)
+    {
+        is_verified = vxIsGraphVerified(graph);
+        ASSERT_EQ_INT(is_verified, vx_false_e);
+    }
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxProcessGraphBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+
+    graph = vxCreateGraph(context_test);
+    status = vxProcessGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    graph = vxCreateGraph(context);
+    status = vxProcessGraph(graph);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxQueryGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+    char * test = (char*)ct_alloc_mem(sizeof(vx_perf_t));
+    vx_status status = VX_SUCCESS;
+
+    graph = vxCreateGraph(context_test);
+    status = vxQueryGraph(graph, VX_GRAPH_PERFORMANCE, test, sizeof(test));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    graph = vxCreateGraph(context);
+    status = vxQueryGraph(graph, VX_GRAPH_PERFORMANCE, test, 0);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    VX_CALL(vxQueryGraph(graph, VX_GRAPH_PERFORMANCE, test, sizeof(vx_perf_t)));
+
+    status = vxQueryGraph(graph, VX_GRAPH_STATE, test, 0);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    VX_CALL(vxQueryGraph(graph, VX_GRAPH_STATE, test, sizeof(vx_enum)));
+
+    status = vxQueryGraph(graph, VX_GRAPH_NUMNODES, test, 0);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    VX_CALL(vxQueryGraph(graph, VX_GRAPH_NUMNODES, test, sizeof(vx_uint32)));
+
+    status = vxQueryGraph(graph, VX_GRAPH_NUMPARAMETERS, test, 0);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+    VX_CALL(vxQueryGraph(graph, VX_GRAPH_NUMPARAMETERS, test, sizeof(vx_uint32)));
+
+    status = vxQueryGraph(graph, VX_GRAPH_STATE_ABANDONED, test, 0);
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    ct_free_mem(test);
+}
+
+TEST(GraphBase, testvxWaitGraphBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+
+    graph = vxCreateGraph(context_test);
+    status = vxWaitGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    graph = vxCreateGraph(context);
+    status = vxWaitGraph(graph);
+    ASSERT_EQ_INT(VX_FAILURE, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxVerifyGraphBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+
+    graph = vxCreateGraph(context);
+    status = vxVerifyGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_GRAPH, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxScheduleGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+
+    status = vxScheduleGraph(graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    graph = vxCreateGraph(context);
+    status = vxScheduleGraph(graph);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxReleaseGraph)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+
+    status = vxReleaseGraph(&graph);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    graph = vxCreateGraph(context);
+    status = vxReleaseGraph(&graph);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+}
+
+TEST(GraphBase, testvxQueryNodeBase)
+{
+    vx_node node = 0;
+    vx_size size = 0;
+    vx_perf_t perf = { 0 };
+    void* ptr = NULL;
+    vx_border_t border = { 0 };
+    vx_bool flag = vx_true_e;
+    vx_uint32 numParams = 0;
+    vx_status status = VX_SUCCESS;
+
+    status = vxQueryNode(node, VX_NODE_PERFORMANCE, &perf, sizeof(vx_perf_t));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_STATUS, &status, sizeof(vx_status));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_LOCAL_DATA_SIZE, &size, sizeof(size));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &ptr, sizeof(ptr));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_BORDER, &border, sizeof(vx_border_t));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_PARAMETERS, &numParams, sizeof(numParams));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_IS_REPLICATED, &flag, sizeof(flag));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_REPLICATE_FLAGS, &size, sizeof(size));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_NODE_VALID_RECT_RESET, &flag, sizeof(flag));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    status = vxQueryNode(node, VX_ERROR_NOT_SUPPORTED, &size, sizeof(size));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+}
+
+TEST(GraphBase, testvxReleaseNodeBase)
+{
+    vx_node node = 0;
+    vx_status status = VX_SUCCESS;
+    status = vxReleaseNode(&node);
+    ASSERT_EQ_VX_STATUS(VX_ERROR_INVALID_REFERENCE, status);
+}
+
+TEST(GraphBase, testvxRemoveNodeBase)
+{
+    vx_node node = 0;
+    vx_status status = VX_SUCCESS;
+    status = vxRemoveNode(&node);
+    ASSERT_EQ_VX_STATUS(VX_ERROR_INVALID_REFERENCE, status);
+}
+
+TEST(GraphBase, testvxReplicateNodeBase)
+{
+    vx_context context = context_->vx_context_;
+    vx_node node = 0;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+    vx_bool replicate[] = { vx_true_e, vx_true_e, vx_false_e, vx_true_e };
+
+    status = vxReplicateNode(graph, node, replicate, 4);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+    graph = vxCreateGraph(context);
+    ASSERT_VX_OBJECT(graph, VX_TYPE_GRAPH);
+    status = vxReplicateNode(graph, node, replicate, 4);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(GraphBase, testvxSetNodeAttributeBase)
+{
+    vx_node node1 = 0;
+    vx_border_t border = { VX_BORDER_UNDEFINED };
+    vx_status status = VX_SUCCESS;
+
+    status = vxSetNodeAttribute(node1, VX_NODE_BORDER, &border, sizeof(border));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    ASSERT(node1 == 0);
+}
+
+#ifdef OPENVX_USE_ENHANCED_VISION
+
+/* *****************testKernelName_enhanced tests*******************************/
+TESTCASE(GraphEnhanced, CT_VXContext, ct_setup_vx_context, 0)
+TEST_WITH_ARG(GraphEnhanced, testKernelName_enhanced, kernel_name_arg,
+    ARG("org.khronos.openvx.min",                        VX_KERNEL_MIN),
+    ARG("org.khronos.openvx.max",                        VX_KERNEL_MAX),
+    ARG("org.khronos.openvx.match_template",             VX_KERNEL_MATCH_TEMPLATE),
+    ARG("org.khronos.openvx.lbp",                        VX_KERNEL_LBP),
+    ARG("org.khronos.openvx.hough_lines_probabilistic",  VX_KERNEL_HOUGH_LINES_P),
+    ARG("org.khronos.openvx.tensor_multiply",            VX_KERNEL_TENSOR_MULTIPLY),
+    ARG("org.khronos.openvx.tensor_add",                 VX_KERNEL_TENSOR_ADD),
+    ARG("org.khronos.openvx.tensor_subtract",            VX_KERNEL_TENSOR_SUBTRACT),
+    ARG("org.khronos.openvx.tensor_table_lookup",        VX_KERNEL_TENSOR_TABLE_LOOKUP),
+    ARG("org.khronos.openvx.tensor_transpose",           VX_KERNEL_TENSOR_TRANSPOSE),
+    ARG("org.khronos.openvx.tensor_convert_depth",       VX_KERNEL_TENSOR_CONVERT_DEPTH),
+    ARG("org.khronos.openvx.tensor_matrix_multiply ",    VX_KERNEL_TENSOR_MATRIX_MULTIPLY),
+    ARG("org.khronos.openvx.copy_node",                  VX_KERNEL_COPY),
+    ARG("org.khronos.openvx.nonmaxsuppression",          VX_KERNEL_NON_MAX_SUPPRESSION),
+    ARG("org.khronos.openvx.scalar_operation",           VX_KERNEL_SCALAR_OPERATION),
+    ARG("org.khronos.openvx.hogfeatures",                VX_KERNEL_HOG_FEATURES),
+    ARG("org.khronos.openvx.hog_cells",                  VX_KERNEL_HOG_CELLS),
+    ARG("org.khronos.openvx.bilateral_filter ",          VX_KERNEL_BILATERAL_FILTER),
+    ARG("org.khronos.openvx.select",                     VX_KERNEL_SELECT),
+    )
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum   kernel_id = 0;
+
+    EXPECT_VX_OBJECT(kernel = vxGetKernelByName(context, arg_->name), VX_TYPE_KERNEL);
+
+    if (CT_HasFailure())
+    {
+        vx_char name[VX_MAX_KERNEL_NAME] = { 0 };
+
+        ASSERT_VX_OBJECT(kernel = vxGetKernelByEnum(context, arg_->kernel_id), VX_TYPE_KERNEL);
+        VX_CALL(vxQueryKernel(kernel, VX_KERNEL_NAME, &name, sizeof(name)));
+        printf("\tExpected kernel name is: %s\n", arg_->name);
+        printf("\tActual kernel name is:   %-*s\n", VX_MAX_KERNEL_NAME, name);
+    }
+    else
+    {
+        VX_CALL(vxQueryKernel(kernel, VX_KERNEL_ENUM, &kernel_id, sizeof(kernel_id)));
+        EXPECT_EQ_INT(arg_->kernel_id, kernel_id);
+    }
+
+    VX_CALL(vxReleaseKernel(&kernel));
+}
+
+#endif //OPENVX_USE_ENHANCED_VISION
+
+#if defined OPENVX_CONFORMANCE_NEURAL_NETWORKS || OPENVX_CONFORMANCE_NNEF_IMPORT
+
+/* *****************UserKernelsOfNNAndNNEF tests*******************************/
+TESTCASE(UserKernelsOfNNAndNNEF, CT_VXContext, ct_setup_vx_context, 0)
+
+#define VX_USER_KERNEL_CONFORMANCE_NAME  "org.khronos.openvx.test.user.kernel.tensor"
+#define VX_MAX_TENSOR_DIMENSIONS 6
+#define Q78_FIXED_POINT_POSITION 8
+#define MAX_DIMS_TEST1   4
+#define TEST_TENSOR_MIN_DIM_SZ   1
+#define TEST_TENSOR_MAX_DIM_SZ   20
+
+
+static vx_status VX_CALLBACK userKernelValidate1(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+{
+    ASSERT_(return VX_FAILURE, num == 2);
+
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK userKernelValidate2(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+{
+    vx_size num_of_dims = 0;
+    vx_size dims[VX_MAX_TENSOR_DIMENSIONS] = {0};
+    vx_enum data_type = 0;
+    vx_int8 fixed_point_pos = 0;
+    vx_tensor input = 0;
+
+    ASSERT_(return VX_FAILURE, num == 2);
+
+    input = (vx_tensor)parameters[0];
+
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DIMS, dims, sizeof(vx_size) * num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DATA_TYPE, &data_type, sizeof(data_type)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_FIXED_POINT_POSITION, &fixed_point_pos, sizeof(fixed_point_pos)));
+
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, dims, sizeof(vx_size) * num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &data_type, sizeof(data_type)));
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatAttribute(metas[1], VX_TENSOR_FIXED_POINT_POSITION, &fixed_point_pos, sizeof(fixed_point_pos)));
+
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK userKernelValidate3(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+{
+    ASSERT_(return VX_FAILURE, num == 2);
+
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatFromReference(metas[1], parameters[0]));
+
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK userKernelValidate4(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+{
+    vx_tensor input;
+    vx_size expect_num_of_dims = 0;
+    vx_size expect_dims[VX_MAX_TENSOR_DIMENSIONS] = {0};
+    vx_enum expect_data_type = 0;
+    vx_int8 expect_fixed_point_pos = 0;
+    vx_size actual_num_of_dims = 1;
+    vx_size actual_dims[VX_MAX_TENSOR_DIMENSIONS] = {1};
+    vx_enum actual_data_type = 1;
+    vx_int8 actual_fixed_point_pos = 1;
+
+    input = (vx_tensor)parameters[0];
+
+    ASSERT_(return VX_FAILURE, num == 2);
+
+    VX_CALL_(return VX_FAILURE, vxSetMetaFormatFromReference(metas[1], parameters[0]));
+
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_NUMBER_OF_DIMS, &actual_num_of_dims, sizeof(actual_num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DIMS, actual_dims, sizeof(vx_size) * actual_num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DATA_TYPE, &actual_data_type, sizeof(actual_data_type)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_FIXED_POINT_POSITION, &actual_fixed_point_pos, sizeof(actual_fixed_point_pos)));
+
+    VX_CALL_(return VX_FAILURE, vxQueryMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &expect_num_of_dims, sizeof(expect_num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxQueryMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, expect_dims, sizeof(vx_size) * expect_num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxQueryMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &expect_data_type, sizeof(expect_data_type)));
+    VX_CALL_(return VX_FAILURE, vxQueryMetaFormatAttribute(metas[1], VX_TENSOR_FIXED_POINT_POSITION, &expect_fixed_point_pos, sizeof(expect_fixed_point_pos)));
+
+    EXPECT_EQ_INT(expect_num_of_dims, actual_num_of_dims);
+    EXPECT_EQ_INT(expect_data_type, actual_data_type);
+    EXPECT_EQ_INT(expect_fixed_point_pos, actual_fixed_point_pos);
+    for (vx_uint8 i = 0; i < actual_num_of_dims; i++)
+    {
+        EXPECT_EQ_INT(expect_dims[i], actual_dims[i]);
+    }
+
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK userKernelProc1(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+    vx_tensor input, output;
+    ASSERT_(return VX_FAILURE, num == 2);
+    ASSERT_VX_OBJECT_(return VX_FAILURE, input  = (vx_tensor)parameters[0], VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT_(return VX_FAILURE, output = (vx_tensor)parameters[1], VX_TYPE_TENSOR);
+
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK userKernelProc2(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+    vx_tensor input, output;
+    vx_size expect_num_of_dims = 0;
+    vx_size expect_dims[VX_MAX_TENSOR_DIMENSIONS] = {0};
+    vx_enum expect_data_type = 0;
+    vx_int8 expect_fixed_point_pos = 0;
+    vx_size actual_num_of_dims = 1;
+    vx_size actual_dims[VX_MAX_TENSOR_DIMENSIONS] = {1};
+    vx_enum actual_data_type = 1;
+    vx_int8 actual_fixed_point_pos = 1;
+
+    ASSERT_(return VX_FAILURE, num == 2);
+    ASSERT_VX_OBJECT_(return VX_FAILURE, input  = (vx_tensor)parameters[0], VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT_(return VX_FAILURE, output = (vx_tensor)parameters[1], VX_TYPE_TENSOR);
+
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_NUMBER_OF_DIMS, &actual_num_of_dims, sizeof(actual_num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DIMS, actual_dims, sizeof(vx_size) * actual_num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_DATA_TYPE, &actual_data_type, sizeof(actual_data_type)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(input, VX_TENSOR_FIXED_POINT_POSITION, &actual_fixed_point_pos, sizeof(actual_fixed_point_pos)));
+
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(output, VX_TENSOR_NUMBER_OF_DIMS, &expect_num_of_dims, sizeof(expect_num_of_dims)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(output, VX_TENSOR_DIMS, expect_dims, sizeof(vx_size) * expect_num_of_dims));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(output, VX_TENSOR_DATA_TYPE, &expect_data_type, sizeof(expect_data_type)));
+    VX_CALL_(return VX_FAILURE, vxQueryTensor(output, VX_TENSOR_FIXED_POINT_POSITION, &expect_fixed_point_pos, sizeof(expect_fixed_point_pos)));
+
+    EXPECT_EQ_INT(expect_num_of_dims, actual_num_of_dims);
+    EXPECT_EQ_INT(expect_data_type, actual_data_type);
+    EXPECT_EQ_INT(expect_fixed_point_pos, actual_fixed_point_pos);
+    for (vx_uint8 i = 0; i < actual_num_of_dims; i++)
+    {
+        EXPECT_EQ_INT(expect_dims[i], actual_dims[i]);
+    }
+
+    return VX_SUCCESS;
+}
+
+
+TEST(UserKernelsOfNNAndNNEF, testvxAddUserKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc1,
+            numParams,
+            userKernelValidate1,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(UserKernelsOfNNAndNNEF, testvxRemoveKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc1,
+            numParams,
+            userKernelValidate1,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+
+    EXPECT_EQ_VX_STATUS(VX_SUCCESS, vxRemoveKernel(kernel));
+}
+
+TEST(UserKernelsOfNNAndNNEF, testvxFinalizeKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc1,
+            numParams,
+            userKernelValidate1,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    EXPECT_EQ_VX_STATUS(VX_SUCCESS, vxFinalizeKernel(kernel));
+
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(UserKernelsOfNNAndNNEF, testvxAddParameterToKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_uint32 numParams = 2;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc1,
+            numParams,
+            userKernelValidate2,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(UserKernelsOfNNAndNNEF, testvxSetKernelAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_size actual_datasize = 256;
+    vx_size expect_datasize = 0;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc1,
+            numParams,
+            userKernelValidate2,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxSetKernelAttribute(kernel, VX_KERNEL_LOCAL_DATA_SIZE, &actual_datasize, sizeof(actual_datasize)));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxQueryKernel(kernel, VX_KERNEL_LOCAL_DATA_SIZE, &expect_datasize, sizeof(expect_datasize)));
+    EXPECT_EQ_INT(expect_datasize, actual_datasize);
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+
+    expect_datasize = 0;
+    VX_CALL(vxQueryNode(node, VX_NODE_LOCAL_DATA_SIZE, &expect_datasize, sizeof(expect_datasize)));
+    EXPECT_EQ_INT(expect_datasize, actual_datasize);
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+/* *****************MetaFormatOfNNAndNNEF tests*******************************/
+TESTCASE(MetaFormatOfNNAndNNEF, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(MetaFormatOfNNAndNNEF, testvxSetMetaFormatAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc2,
+            numParams,
+            userKernelValidate2,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(MetaFormatOfNNAndNNEF, testvxSetMetaFormatFromReference)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc2,
+            numParams,
+            userKernelValidate3,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(MetaFormatOfNNAndNNEF, testvxQueryMetaFormatAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+            context,
+            VX_USER_KERNEL_CONFORMANCE_NAME,
+            kernel_enum,
+            userKernelProc2,
+            numParams,
+            userKernelValidate4,
+            NULL,
+            NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+/* *****************VxKernelOfNNAndNNEF tests*******************************/
+TESTCASE(VxKernelOfNNAndNNEF, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(VxKernelOfNNAndNNEF, testvxGetKernelByEnum)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByEnum(context, kernel_enum), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(VxKernelOfNNAndNNEF, testvxGetKernelByName)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(VxKernelOfNNAndNNEF, testvxQueryKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_enum test_kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+    vx_uint32 para_num = 0;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxQueryKernel(kernel, VX_KERNEL_ENUM, &test_kernel_enum, sizeof(test_kernel_enum)));
+    EXPECT_EQ_INT(kernel_enum, test_kernel_enum);
+    VX_CALL(vxQueryKernel(kernel, VX_KERNEL_PARAMETERS, &para_num, sizeof(vx_uint32)));
+    EXPECT_EQ_INT(2, para_num);
+
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(VxKernelOfNNAndNNEF, testvxReleaseKernel)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+
+/* *****************VxParameterOfNNAndNNEF tests*******************************/
+TESTCASE(VxParameterOfNNAndNNEF, CT_VXContext, ct_setup_vx_context, 0)
+
+TEST(VxParameterOfNNAndNNEF, test_vxGetKernelParameterByIndex)
+{
+    vx_context context = context_->vx_context_;
+    vx_uint32 ref_count0 = 0;
+    vx_uint32 ref_count1 = 0;
+    vx_reference ref = 0;
+    vx_kernel kernel = 0;
+    vx_parameter parameter = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    EXPECT_VX_OBJECT(kernel = vxGetKernelByEnum(context, kernel_enum), VX_TYPE_KERNEL);
+    EXPECT_VX_OBJECT(parameter = vxGetKernelParameterByIndex(kernel, 0), VX_TYPE_PARAMETER);
+    ref = (vx_reference)parameter;
+    ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count0, sizeof(ref_count0)), VX_SUCCESS);
+    VX_CALL(vxRetainReference(ref));
+    ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+    ASSERT_EQ_INT(ref_count1 - ref_count0, 1);
+    VX_CALL(vxReleaseReference(&ref));
+    ref = (vx_reference)parameter;
+    ref_count1 = 0;
+    ASSERT_EQ_VX_STATUS(vxQueryReference(ref, VX_REFERENCE_COUNT, (void*)&ref_count1, sizeof(ref_count1)), VX_SUCCESS);
+    ASSERT_EQ_INT(ref_count1 - ref_count0, 0);
+
+    VX_CALL(vxRemoveKernel(kernel));
+    VX_CALL(vxReleaseParameter(&parameter));
+}
+
+TEST(VxParameterOfNNAndNNEF, test_vxQueryParameter)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = 0;
+    vx_parameter parameter = 0;
+    vx_enum kernel_enum = 0u;
+    vx_uint32 numParams = 2;
+    vx_uint32 index = 256;
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate1,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    EXPECT_VX_OBJECT(kernel = vxGetKernelByEnum(context, kernel_enum), VX_TYPE_KERNEL);
+    EXPECT_VX_OBJECT(parameter = vxGetKernelParameterByIndex(kernel, 0), VX_TYPE_PARAMETER);
+    EXPECT_EQ_INT(VX_SUCCESS, vxQueryParameter(parameter, VX_PARAMETER_INDEX, &index, sizeof(vx_uint32)));
+    ASSERT(index == 0);
+    VX_CALL(vxReleaseParameter(&parameter));
+    VX_CALL(vxRemoveKernel(kernel));
+}
+
+TEST(VxParameterOfNNAndNNEF, test_vxSetParameterByIndex)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_enum kernel_enum = 0u;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_uint32 numParams = 2;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate2,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ + 1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(VxParameterOfNNAndNNEF, test_vxSetParameterByReference)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_parameter parameter = 0;
+    vx_enum kernel_enum = 0u;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_uint32 numParams = 2;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate2,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ + 1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 0), VX_TYPE_PARAMETER);
+    VX_CALL(vxSetParameterByReference(parameter, (vx_reference)in_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseParameter(&parameter));
+    ASSERT(parameter == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(VxParameterOfNNAndNNEF, test_vxGetParameterByIndex)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_parameter parameter = 0;
+    vx_enum kernel_enum = 0u;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_tensor test_tensor = 0;
+    vx_uint32 numParams = 2;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate2,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ + 1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 0), VX_TYPE_PARAMETER);
+    VX_CALL(vxQueryParameter(parameter, VX_PARAMETER_REF, &test_tensor, sizeof(test_tensor)));
+    ASSERT_VX_OBJECT(test_tensor, VX_TYPE_TENSOR);
+    VX_CALL(vxReleaseTensor(&test_tensor));
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseParameter(&parameter));
+    ASSERT(parameter == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+TEST(VxParameterOfNNAndNNEF, test_vxReleaseParameter)
+{
+    vx_context context = context_->vx_context_;
+    vx_graph graph = 0;
+    vx_node node = 0;
+    vx_kernel kernel = 0;
+    vx_parameter parameter = 0;
+    vx_enum kernel_enum = 0u;
+    vx_tensor in_tensor = 0;
+    vx_tensor out_tensor = 0;
+    vx_uint32 numParams = 2;
+    vx_enum data_type = VX_TYPE_INT16;
+    vx_int8 fixed_point_position = Q78_FIXED_POINT_POSITION;
+    vx_size max_dims = MAX_DIMS_TEST1;
+
+    uint64_t rng;
+    {
+        uint64_t * seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+
+    VX_CALL(vxAllocateUserKernelId(context, &kernel_enum));
+    ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
+        context,
+        VX_USER_KERNEL_CONFORMANCE_NAME,
+        kernel_enum,
+        userKernelProc1,
+        numParams,
+        userKernelValidate2,
+        NULL,
+        NULL), VX_TYPE_KERNEL);
+
+    VX_CALL(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    VX_CALL(vxFinalizeKernel(kernel));
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * max_dims);
+    ASSERT(tensor_dims);
+
+    for (vx_size i = 0; i < max_dims; ++i)
+    {
+        tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ + 1);
+    }
+
+    in_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    out_tensor = vxCreateTensor(context, max_dims, tensor_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(in_tensor, VX_TYPE_TENSOR);
+    ASSERT_VX_OBJECT(out_tensor, VX_TYPE_TENSOR);
+
+    ASSERT_VX_OBJECT(node = vxCreateGenericNode(graph, kernel), VX_TYPE_NODE);
+    VX_CALL(vxSetParameterByIndex(node, 0, (vx_reference)in_tensor));
+    VX_CALL(vxSetParameterByIndex(node, 1, (vx_reference)out_tensor));
+
+    ASSERT_VX_OBJECT(parameter = vxGetParameterByIndex(node, 0), VX_TYPE_PARAMETER);
+
+    VX_CALL(vxReleaseNode(&node));
+    ASSERT(node == 0);
+
+    VX_CALL(vxReleaseKernel(&kernel));
+    ASSERT(kernel == 0);
+
+    VX_CALL(vxReleaseParameter(&parameter));
+    ASSERT(parameter == 0);
+
+    VX_CALL(vxReleaseGraph(&graph));
+    EXPECT_EQ_PTR(0, graph);
+
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, VX_USER_KERNEL_CONFORMANCE_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxRemoveKernel(kernel));
+
+    VX_CALL(vxReleaseTensor(&in_tensor));
+    EXPECT_EQ_PTR(NULL, in_tensor);
+
+    VX_CALL(vxReleaseTensor(&out_tensor));
+    EXPECT_EQ_PTR(NULL, out_tensor);
+
+    ct_free_mem(tensor_dims);
+}
+
+#endif //OPENVX_CONFORMANCE_NEURAL_NETWORKS || OPENVX_CONFORMANCE_NNEF_IMPORT
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 TESTCASE_TESTS(Graph,
         testTwoNodes,
@@ -2353,10 +4107,74 @@ TESTCASE_TESTS(Graph,
         testNodePerformance,
         testGraphPerformance,
         testKernelName,
-        testAllocateUserKernelId,
-        testAllocateUserKernelLibraryId,
         testReplicateNode,
         testImageContainmentRelationship,
         testVerifyGraphLeak,
-        testGraphState
+        testGraphState,
+        testvxIsGraphVerified,
+        testvxProcessGraph,
+        testvxWaitGraph,
+        testvxVerifyGraph,
+        testvxQueryNode,
+        testvxReleaseNode,
+        testvxSetNodeAttribute
         )
+
+#endif
+
+TESTCASE_TESTS(GraphBase,
+        testAllocateUserKernelId,
+        testAllocateUserKernelLibraryId,
+        testRegisterUserStructWithName,
+        testGetUserStructNameByEnum,
+        testGetUserStructEnumByName,
+        testvxCreateGraph,
+        testvxIsGraphVerifiedBase,
+        testvxProcessGraphBase,
+        testvxQueryGraph,
+        testvxWaitGraphBase,
+        testvxVerifyGraphBase,
+        testvxScheduleGraph,
+        testvxReleaseGraph,
+        testvxQueryNodeBase,
+        testvxReleaseNodeBase,
+        testvxRemoveNodeBase,
+        testvxReplicateNodeBase,
+        testvxSetNodeAttributeBase
+        )
+
+#ifdef OPENVX_USE_ENHANCED_VISION
+
+TESTCASE_TESTS(GraphEnhanced, testKernelName_enhanced)
+
+#endif
+
+#if defined OPENVX_CONFORMANCE_NEURAL_NETWORKS || OPENVX_CONFORMANCE_NNEF_IMPORT
+
+TESTCASE_TESTS(UserKernelsOfNNAndNNEF,
+        testvxAddUserKernel,
+        testvxRemoveKernel,
+        testvxFinalizeKernel,
+        testvxAddParameterToKernel,
+        testvxSetKernelAttribute)
+
+TESTCASE_TESTS(MetaFormatOfNNAndNNEF,
+        testvxSetMetaFormatAttribute,
+        testvxSetMetaFormatFromReference,
+        testvxQueryMetaFormatAttribute)
+
+TESTCASE_TESTS(VxKernelOfNNAndNNEF,
+        testvxGetKernelByEnum,
+        testvxGetKernelByName,
+        testvxQueryKernel,
+        testvxReleaseKernel)
+
+TESTCASE_TESTS(VxParameterOfNNAndNNEF,
+        test_vxGetKernelParameterByIndex,
+        test_vxQueryParameter,
+        test_vxSetParameterByIndex,
+        test_vxSetParameterByReference,
+        test_vxGetParameterByIndex,
+        test_vxReleaseParameter)
+
+#endif

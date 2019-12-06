@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -734,6 +736,14 @@ TEST_WITH_ARG(UserNode, testUserKernel, type_arg, USERKERNEL_PARAMETERS)
 
     case VX_TYPE_REMAP:
         {
+            vx_coordinates2df_t *data = ct_alloc_mem(dst_width * dst_height * sizeof(vx_coordinates2df_t));
+            vx_rectangle_t rect;
+            rect.start_x = 0;
+            rect.start_y = 0;
+            rect.end_x = dst_width;
+            rect.end_y = dst_height;
+            vx_size user_stride_y = dst_width * sizeof(vx_coordinates2df_t);
+
             ASSERT_VX_OBJECT(src = (vx_reference)vxCreateRemap(context, src_width, src_height, dst_width, dst_height), type);
             ASSERT_VX_OBJECT(dst = (vx_reference)vxCreateRemap(context, src_width, src_height, dst_width, dst_height), type);
 
@@ -741,9 +751,14 @@ TEST_WITH_ARG(UserNode, testUserKernel, type_arg, USERKERNEL_PARAMETERS)
             {
                 for (j = 0; j < dst_height; j++)
                 {
-                    VX_CALL(vxSetRemapPoint((vx_remap)src, i, j, (vx_float32)((i + j) % src_width), (vx_float32)((i * j) % src_height)));
+                    data[j * dst_width + i].x = (vx_float32)((i + j) % src_width);
+                    data[j * dst_width + i].y = (vx_float32)((i * j) % src_height);
                 }
             }
+
+            VX_CALL(vxCopyRemapPatch((vx_remap)src, &rect, user_stride_y, (void *)data,
+                                      VX_TYPE_COORDINATES2DF, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
+            ct_free_mem(data);
         }
         break;
 
@@ -767,10 +782,12 @@ TEST_WITH_ARG(UserNode, testUserKernel, type_arg, USERKERNEL_PARAMETERS)
 
     case VX_TYPE_THRESHOLD:
         {
-            ASSERT_VX_OBJECT(src = (vx_reference)vxCreateThreshold(context, thresh_type, item_type), type);
-            ASSERT_VX_OBJECT(dst = (vx_reference)vxCreateThreshold(context, thresh_type, item_type), type);
+            vx_pixel_value_t pixel_value = {0};
+            pixel_value.U8 = thresh_val;
+            ASSERT_VX_OBJECT(src = (vx_reference)vxCreateThresholdForImage(context, thresh_type, format, format), type);
+            ASSERT_VX_OBJECT(dst = (vx_reference)vxCreateThresholdForImage(context, thresh_type, format, format), type);
 
-            VX_CALL(vxSetThresholdAttribute((vx_threshold)src, VX_THRESHOLD_THRESHOLD_VALUE, (void *)&thresh_val, sizeof(thresh_val)));
+            VX_CALL(vxCopyThresholdValue((vx_threshold)src, &pixel_value, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
         }
         break;
 
@@ -969,7 +986,7 @@ TEST_WITH_ARG(UserNode, testUserKernelObjectArray, type_arg,
         ASSERT_VX_OBJECT(exemplar = (vx_reference)vxCreateLUT(context, item_type, num_items), objarray_itemtype);
         break;
     case VX_TYPE_THRESHOLD:
-        ASSERT_VX_OBJECT(exemplar = (vx_reference)vxCreateThreshold(context, thresh_type, item_type), objarray_itemtype);
+        ASSERT_VX_OBJECT(exemplar = (vx_reference)vxCreateThresholdForImage(context, thresh_type, format, format), objarray_itemtype);
         break;
     default:
         break;
@@ -1062,3 +1079,5 @@ TESTCASE_TESTS(UserNode,
         testRemoveKernel,
         testOutDelay
         )
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

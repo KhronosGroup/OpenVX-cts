@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <string.h>
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -73,7 +75,7 @@ TEST(Distribution, testvxCreateVirtualDistribution)
             CT_FAIL("check for query distribution attribute VX_DISTRIBUTION_BINS failed\n");
 
         VX_CALL(vxQueryDistribution(dist1, VX_DISTRIBUTION_WINDOW, &attr_window, sizeof(attr_window)));
-        /*Tthe attribute is specified as valid only when the range is a multiple of nbins, 
+        /*Tthe attribute is specified as valid only when the range is a multiple of nbins,
         * in other cases, its value shouldn't be checked */
         if (((range % nbins) == 0) && (attr_window != reference_window(range, nbins)))
             CT_FAIL("check for query distribution attribute VX_DISTRIBUTION_WINDOW failed\n");
@@ -85,3 +87,5 @@ TEST(Distribution, testvxCreateVirtualDistribution)
 }
 
 TESTCASE_TESTS(Distribution, testvxCreateVirtualDistribution)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

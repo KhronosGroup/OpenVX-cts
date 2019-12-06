@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 #include <math.h>
 #include <float.h>
@@ -99,28 +101,47 @@ enum CT_AffineMatrixType {
 #define VX_NN_AREA_SIZE         1.5
 #define VX_BILINEAR_TOLERANCE   1
 
-static CT_Image warp_affine_read_image_8u(const char* fileName, int width, int height)
+static CT_Image warp_affine_read_image(const char* fileName, int width, int height, vx_df_image format)
 {
-    CT_Image image = NULL;
+    CT_Image image_load = NULL, image_ret = NULL;
+    ASSERT_(return 0, format == VX_DF_IMAGE_U1 || format == VX_DF_IMAGE_U8);
 
-    image = ct_read_image(fileName, 1);
-    ASSERT_(return 0, image);
-    ASSERT_(return 0, image->format == VX_DF_IMAGE_U8);
+    image_load = ct_read_image(fileName, 1);
+    ASSERT_(return 0, image_load);
+    ASSERT_(return 0, image_load->format == VX_DF_IMAGE_U8);
 
-    return image;
+    if (format == VX_DF_IMAGE_U1)
+    {
+        ASSERT_NO_FAILURE_(return 0, threshold_U8_ct_image(image_load, 127));   // Threshold to make the U1 image less trivial
+        ASSERT_NO_FAILURE_(return 0, image_ret = ct_allocate_image(image_load->width, image_load->height, VX_DF_IMAGE_U1));
+        ASSERT_NO_FAILURE_(return 0, U8_ct_image_to_U1_ct_image(image_load, image_ret));
+    }
+    else    // format == VX_DF_IMAGE_U8
+    {
+        image_ret = image_load;
+    }
+
+    ASSERT_(return 0, image_ret);
+    ASSERT_(return 0, image_ret->format == format);
+
+    return image_ret;
 }
 
-static CT_Image warp_affine_generate_random(const char* fileName, int width, int height)
+static CT_Image warp_affine_generate_random(const char* fileName, int width, int height, vx_df_image format)
 {
     CT_Image image;
+    ASSERT_(return 0, format == VX_DF_IMAGE_U1 || format == VX_DF_IMAGE_U8);
 
-    ASSERT_NO_FAILURE_(return 0,
-            image = ct_allocate_ct_image_random(width, height, VX_DF_IMAGE_U8, &CT()->seed_, 0, 256));
+    if (format == VX_DF_IMAGE_U1)
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 2));
+    else    // format == VX_DF_IMAGE_U8
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 256));
 
     return image;
 }
 
 #define RND_FLT(low, high)      (vx_float32)CT_RNG_NEXT_REAL(CT()->seed_, low, high);
+
 static void warp_affine_generate_matrix(vx_float32* m, int src_width, int src_height, int dst_width, int dst_height, int type)
 {
     vx_float32 mat[3][2];
@@ -212,16 +233,29 @@ static vx_matrix warp_affine_create_matrix(vx_context context, vx_float32 *m)
     return matrix;
 }
 
-
 static int warp_affine_check_pixel(CT_Image input, CT_Image output, int x, int y, vx_enum interp_type, vx_border_t border, vx_float32 *m)
 {
     vx_float64 x0, y0, xlower, ylower, s, t;
-    vx_int32 xi, yi;
+    vx_int32 xo, yo, xi, yi, roi_xi, roi_yi, xiShft;
     int candidate;
-    vx_uint8 res = *CT_IMAGE_DATA_PTR_8U(output, x, y);
+    vx_df_image format = input->format;
 
-    x0 = (vx_float64)m[2 * 0 + 0] * (vx_float64)x + (vx_float64)m[2 * 1 + 0] * (vx_float64)y + (vx_float64)m[2 * 2 + 0];
-    y0 = (vx_float64)m[2 * 0 + 1] * (vx_float64)x + (vx_float64)m[2 * 1 + 1] * (vx_float64)y + (vx_float64)m[2 * 2 + 1];
+    xo = x + output->roi.x - (format == VX_DF_IMAGE_U1 ? output->roi.x % 8 : 0);    // ROI independent cordinates
+    yo = y + output->roi.y;
+    roi_xi = input->roi.x;
+    roi_yi = input->roi.y;
+    xiShft = (format == VX_DF_IMAGE_U1) ? input->roi.x % 8 : 0; // Bit-shift used for U1 input image
+
+    vx_uint8 res;
+    if (format == VX_DF_IMAGE_U1)
+        res = (*CT_IMAGE_DATA_PTR_1U(output, x, y) & (1 << (x % 8))) >> (x % 8);
+    else
+        res =  *CT_IMAGE_DATA_PTR_8U(output, x, y);
+
+    x0 = (vx_float64)m[2 * 0 + 0] * (vx_float64)xo + (vx_float64)m[2 * 1 + 0] * (vx_float64)yo + (vx_float64)m[2 * 2 + 0];
+    y0 = (vx_float64)m[2 * 0 + 1] * (vx_float64)xo + (vx_float64)m[2 * 1 + 1] * (vx_float64)yo + (vx_float64)m[2 * 2 + 1];
+    x0 = x0 - (vx_float64)roi_xi + xiShft;       // Switch to ROI-respecting coordinates
+    y0 = y0 - (vx_float64)roi_yi;
 
     if (VX_INTERPOLATION_NEAREST_NEIGHBOR == interp_type)
     {
@@ -229,13 +263,20 @@ static int warp_affine_check_pixel(CT_Image input, CT_Image output, int x, int y
         {
             for (xi = (vx_int32)ceil(x0 - VX_NN_AREA_SIZE); (vx_float64)xi <= x0 + VX_NN_AREA_SIZE; xi++)
             {
-                if (0 <= xi && 0 <= yi && xi < (vx_int32)input->width && yi < (vx_int32)input->height)
+                if (xi >= xiShft                          && yi >= 0 &&
+                    xi <  (vx_int32)input->width + xiShft && yi <  (vx_int32)input->height)
                 {
-                    candidate = *CT_IMAGE_DATA_PTR_8U(input, xi, yi);
+                    if (format == VX_DF_IMAGE_U1)
+                        candidate = (*CT_IMAGE_DATA_PTR_1U(input, xi, yi) & (1 << (xi % 8))) >> (xi % 8);
+                    else
+                        candidate =  *CT_IMAGE_DATA_PTR_8U(input, xi, yi);
                 }
                 else if (VX_BORDER_CONSTANT == border.mode)
                 {
-                    candidate = border.constant_value.U8;
+                    if (format == VX_DF_IMAGE_U1)
+                        candidate = border.constant_value.U1 ? 1 : 0;
+                    else
+                        candidate = border.constant_value.U8;
                 }
                 else
                 {
@@ -245,7 +286,7 @@ static int warp_affine_check_pixel(CT_Image input, CT_Image output, int x, int y
                     return 0;
             }
         }
-        CT_FAIL_(return 1, "Check failed for pixel (%d, %d): %d", x, y, (int)res);
+        CT_FAIL_(return 1, "Check failed for pixel (%d, %d): %d", xo, yo, (int)res);
     }
     else if (VX_INTERPOLATION_BILINEAR == interp_type)
     {
@@ -261,24 +302,61 @@ static int warp_affine_check_pixel(CT_Image input, CT_Image output, int x, int y
         candidate = -1;
         if (VX_BORDER_UNDEFINED == border.mode)
         {
-            if (0 <= xi && 0 <= yi && xi < (vx_int32)input->width - 1 && yi < (vx_int32)input->height - 1)
+            if (xi >= xiShft                             && yi >= 0 &&
+                xi < (vx_int32)input->width - 1 + xiShft && yi < (vx_int32)input->height - 1)
             {
-                candidate = (int)((1. - s) * (1. - t) * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi    , yi    ) +
-                                        s  * (1. - t) * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi + 1, yi    ) +
-                                  (1. - s) *       t  * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi    , yi + 1) +
-                                        s  *       t  * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi + 1, yi + 1));
+                if (format == VX_DF_IMAGE_U1)
+                {
+                    vx_uint8 p00 = (*CT_IMAGE_DATA_PTR_1U(input, xi    , yi    ) & (1 <<  xi      % 8)) >> ( xi      % 8);
+                    vx_uint8 p10 = (*CT_IMAGE_DATA_PTR_1U(input, xi + 1, yi    ) & (1 << (xi + 1) % 8)) >> ((xi + 1) % 8);
+                    vx_uint8 p01 = (*CT_IMAGE_DATA_PTR_1U(input, xi    , yi + 1) & (1 <<  xi      % 8)) >> ( xi      % 8);
+                    vx_uint8 p11 = (*CT_IMAGE_DATA_PTR_1U(input, xi + 1, yi + 1) & (1 << (xi + 1) % 8)) >> ((xi + 1) % 8);
+                    candidate = (int)((1. - s) * (1. - t) * (vx_float64) p00 +
+                                            s  * (1. - t) * (vx_float64) p10 +
+                                      (1. - s) *       t  * (vx_float64) p01 +
+                                            s  *       t  * (vx_float64) p11 + 0.5); // Arithmetic rounding instead of truncation
+                    candidate = (candidate > 1) ? 1 : (candidate < 0) ? 0 : candidate;
+                }
+                else
+                {
+                    candidate = (int)((1. - s) * (1. - t) * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi    , yi    ) +
+                                            s  * (1. - t) * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi + 1, yi    ) +
+                                      (1. - s) *       t  * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi    , yi + 1) +
+                                            s  *       t  * (vx_float64) *CT_IMAGE_DATA_PTR_8U(input, xi + 1, yi + 1));
+                }
             }
         }
         else if (VX_BORDER_CONSTANT == border.mode)
         {
-            candidate = (int)((1. - s) * (1. - t) * (vx_float32)CT_IMAGE_DATA_CONSTANT_8U(input, xi    , yi    , border.constant_value.U8) +
-                                    s  * (1. - t) * (vx_float32)CT_IMAGE_DATA_CONSTANT_8U(input, xi + 1, yi    , border.constant_value.U8) +
-                              (1. - s) *       t  * (vx_float32)CT_IMAGE_DATA_CONSTANT_8U(input, xi    , yi + 1, border.constant_value.U8) +
-                                    s  *       t  * (vx_float32)CT_IMAGE_DATA_CONSTANT_8U(input, xi + 1, yi + 1, border.constant_value.U8));
+            if (format == VX_DF_IMAGE_U1)
+            {
+                vx_uint8 p00 = CT_IMAGE_DATA_CONSTANT_1U(input, xi    , yi    , border.constant_value.U1);
+                vx_uint8 p10 = CT_IMAGE_DATA_CONSTANT_1U(input, xi + 1, yi    , border.constant_value.U1);
+                vx_uint8 p01 = CT_IMAGE_DATA_CONSTANT_1U(input, xi    , yi + 1, border.constant_value.U1);
+                vx_uint8 p11 = CT_IMAGE_DATA_CONSTANT_1U(input, xi + 1, yi + 1, border.constant_value.U1);
+                candidate = (int)((1. - s) * (1. - t) * (vx_float32)p00 +
+                                        s  * (1. - t) * (vx_float32)p10 +
+                                  (1. - s) *       t  * (vx_float32)p01 +
+                                        s  *       t  * (vx_float32)p11 + 0.5);
+                candidate = (candidate > 1) ? 1 : (candidate < 0) ? 0 : candidate;
+            }
+            else
+            {
+                vx_uint8 p00 = CT_IMAGE_DATA_CONSTANT_8U(input, xi    , yi    , border.constant_value.U8);
+                vx_uint8 p10 = CT_IMAGE_DATA_CONSTANT_8U(input, xi + 1, yi    , border.constant_value.U8);
+                vx_uint8 p01 = CT_IMAGE_DATA_CONSTANT_8U(input, xi    , yi + 1, border.constant_value.U8);
+                vx_uint8 p11 = CT_IMAGE_DATA_CONSTANT_8U(input, xi + 1, yi + 1, border.constant_value.U8);
+                candidate = (int)((1. - s) * (1. - t) * (vx_float32)p00 +
+                                        s  * (1. - t) * (vx_float32)p10 +
+                                  (1. - s) *       t  * (vx_float32)p01 +
+                                        s  *       t  * (vx_float32)p11);
+            }
         }
-        if (candidate == -1 || (abs(candidate - res) <= VX_BILINEAR_TOLERANCE))
+        // A tolerance of 1 would make tests on U1 images trivial
+        if ( candidate == -1 || (abs(candidate - res) <= ((format == VX_DF_IMAGE_U1) ? 0 : VX_BILINEAR_TOLERANCE)) )
             return 0;
-        return 1;
+        else
+            return 1;
     }
     CT_FAIL_(return 1, "Interpolation type undefined");
 }
@@ -287,10 +365,20 @@ static void warp_affine_validate(CT_Image input, CT_Image output, vx_enum interp
 {
     vx_uint32 err_count = 0;
 
-    CT_FILL_IMAGE_8U(, output,
-            {
-                ASSERT_NO_FAILURE(err_count += warp_affine_check_pixel(input, output, x, y, interp_type, border, m));
-            });
+    if (input->format == VX_DF_IMAGE_U1)
+    {
+        CT_FILL_IMAGE_1U(, output,
+                {
+                    ASSERT_NO_FAILURE(err_count += warp_affine_check_pixel(input, output, xShftd, y, interp_type, border, m));
+                });
+    }
+    else
+    {
+        CT_FILL_IMAGE_8U(, output,
+                {
+                    ASSERT_NO_FAILURE(err_count += warp_affine_check_pixel(input, output, x, y, interp_type, border, m));
+                });
+    }
     if (10 * err_count > output->width * output->height)
         CT_FAIL_(return, "Check failed for %d pixels", err_count);
 }
@@ -303,6 +391,12 @@ static void warp_affine_check(CT_Image input, CT_Image output, vx_enum interp_ty
 
     ASSERT( (border.mode == VX_BORDER_UNDEFINED) ||
             (border.mode == VX_BORDER_CONSTANT));
+
+    ASSERT( (input->format == output->format) &&
+            (input->format == VX_DF_IMAGE_U1 || input->format == VX_DF_IMAGE_U8));
+
+    ASSERT( ((input->width  == output->width)  || (input->roi.width  == output->roi.width)) &&
+            ((input->height == output->height) || (input->roi.height == output->roi.height)));
 
     warp_affine_validate(input, output, interp_type, border, m);
     if (CT_HasFailure())
@@ -319,13 +413,13 @@ static void warp_affine_check(CT_Image input, CT_Image output, vx_enum interp_ty
 
 typedef struct {
     const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height);
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
     const char* fileName;
-    int src_width, src_height;
     int width, height;
     vx_border_t border;
     vx_enum interp_type;
     int matrix_type;
+    vx_df_image format;
 } Arg;
 
 #define ADD_VX_BORDERS_WARP_AFFINE(testArgName, nextmacro, ...) \
@@ -333,6 +427,11 @@ typedef struct {
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 0 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=1", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 1 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=127", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 127 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} }))
+
+#define ADD_VX_BORDERS_WARP_AFFINE_MINIMAL(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_UNDEFINED", __VA_ARGS__, { VX_BORDER_UNDEFINED, {{ 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 0 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} }))
 
 #define ADD_VX_INTERP_TYPE_WARP_AFFINE(testArgName, nextmacro, ...) \
@@ -349,10 +448,16 @@ typedef struct {
     CT_EXPAND(nextmacro(testArgName "/VX_MATRIX_SCALE_ROTATE", __VA_ARGS__, VX_MATRIX_SCALE_ROTATE)), \
     CT_EXPAND(nextmacro(testArgName "/VX_MATRIX_RANDOM", __VA_ARGS__,       VX_MATRIX_RANDOM))
 
+#define ADD_VX_MATRIX_PARAM_WARP_AFFINE_MINIMAL(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_MATRIX_IDENT", __VA_ARGS__,        VX_MATRIX_IDENT)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_MATRIX_SCALE_ROTATE", __VA_ARGS__, VX_MATRIX_SCALE_ROTATE)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_MATRIX_RANDOM", __VA_ARGS__,       VX_MATRIX_RANDOM))
 
 #define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_VX_BORDERS_WARP_AFFINE, ADD_VX_INTERPOLATION_TYPE_NEAREST_NEIGHBOR, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ARG, warp_affine_generate_random, NULL, 128, 128), \
-    CT_GENERATE_PARAMETERS("lena", ADD_SIZE_SMALL_SET, ADD_VX_BORDERS_WARP_AFFINE, ADD_VX_INTERP_TYPE_WARP_AFFINE, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ARG, warp_affine_read_image_8u, "lena.bmp", 0, 0)
+    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_VX_BORDERS_WARP_AFFINE, ADD_VX_INTERPOLATION_TYPE_NEAREST_NEIGHBOR, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ADD_TYPE_U8, ARG, warp_affine_generate_random, NULL), \
+    CT_GENERATE_PARAMETERS("lena", ADD_SIZE_NONE, ADD_VX_BORDERS_WARP_AFFINE, ADD_VX_INTERP_TYPE_WARP_AFFINE, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ADD_TYPE_U8, ARG, warp_affine_read_image, "lena.bmp"), \
+    CT_GENERATE_PARAMETERS("_U1_/random", ADD_SIZE_SMALL_SET, ADD_VX_BORDERS_WARP_AFFINE_MINIMAL, ADD_VX_INTERPOLATION_TYPE_NEAREST_NEIGHBOR, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ADD_TYPE_U1, ARG, warp_affine_generate_random, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/lena", ADD_SIZE_NONE, ADD_VX_BORDERS_WARP_AFFINE_MINIMAL, ADD_VX_INTERP_TYPE_WARP_AFFINE, ADD_VX_MATRIX_PARAM_WARP_AFFINE, ADD_TYPE_U1, ARG, warp_affine_read_image, "lena.bmp")
 
 TEST_WITH_ARG(WarpAffine, testGraphProcessing, Arg,
     PARAMETERS
@@ -369,12 +474,12 @@ TEST_WITH_ARG(WarpAffine, testGraphProcessing, Arg,
 
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(input = arg_->generator(arg_->fileName, arg_->src_width, arg_->src_height));
-    ASSERT_NO_FAILURE(output = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_U8));
+    ASSERT_NO_FAILURE(input = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+    ASSERT_NO_FAILURE(output = ct_allocate_image(input->width, input->height, input->format));
 
     ASSERT_VX_OBJECT(input_image = ct_image_to_vx_image(input, context), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(output_image = ct_image_to_vx_image(output, context), VX_TYPE_IMAGE);
-    ASSERT_NO_FAILURE(warp_affine_generate_matrix(m, input->width, input->height, arg_->width, arg_->height, arg_->matrix_type));
+    ASSERT_NO_FAILURE(warp_affine_generate_matrix(m, input->width, input->height, input->width/2, input->height/2, arg_->matrix_type));
     ASSERT_VX_OBJECT(matrix = warp_affine_create_matrix(context, m), VX_TYPE_MATRIX);
 
     ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
@@ -415,12 +520,12 @@ TEST_WITH_ARG(WarpAffine, testImmediateProcessing, Arg,
 
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(input = arg_->generator(arg_->fileName, arg_->src_width, arg_->src_height));
-    ASSERT_NO_FAILURE(output = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_U8));
+    ASSERT_NO_FAILURE(input = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+    ASSERT_NO_FAILURE(output = ct_allocate_image(input->width, input->height, input->format));
 
     ASSERT_VX_OBJECT(input_image = ct_image_to_vx_image(input, context), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(output_image = ct_image_to_vx_image(output, context), VX_TYPE_IMAGE);
-    ASSERT_NO_FAILURE(warp_affine_generate_matrix(m, input->width, input->height, arg_->width, arg_->height, arg_->matrix_type));
+    ASSERT_NO_FAILURE(warp_affine_generate_matrix(m, input->width, input->height, input->width/2, input->height/2, arg_->matrix_type));
     ASSERT_VX_OBJECT(matrix = warp_affine_create_matrix(context, m), VX_TYPE_MATRIX);
 
     VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
@@ -440,8 +545,71 @@ TEST_WITH_ARG(WarpAffine, testImmediateProcessing, Arg,
     ASSERT(input_image == 0);
 }
 
+typedef struct {
+    const char* testName;
+    CT_Image (*generator)(const char* fileName, int width, int height, vx_df_image format);
+    const char* fileName;
+    int width, height;
+    vx_border_t border;
+    vx_enum interp_type;
+    int matrix_type;
+    vx_df_image format;
+    vx_rectangle_t region_shift;
+} ValidRegionTest_Arg;
+
+#define REGION_PARAMETERS \
+    CT_GENERATE_PARAMETERS("lena", ADD_SIZE_256x256, ADD_VX_BORDERS_WARP_AFFINE_MINIMAL, ADD_VX_INTERP_TYPE_WARP_AFFINE, ADD_VX_MATRIX_PARAM_WARP_AFFINE_MINIMAL, ADD_TYPE_U8, ADD_VALID_REGION_SHRINKS, ARG, warp_affine_read_image, "lena.bmp"), \
+    CT_GENERATE_PARAMETERS("_U1_/lena", ADD_SIZE_256x256, ADD_VX_BORDERS_WARP_AFFINE_MINIMAL, ADD_VX_INTERP_TYPE_WARP_AFFINE, ADD_VX_MATRIX_PARAM_WARP_AFFINE_MINIMAL, ADD_TYPE_U1, ADD_VALID_REGION_SHRINKS, ARG, warp_affine_read_image, "lena.bmp")
+
+TEST_WITH_ARG(WarpAffine, testWithValidRegion, ValidRegionTest_Arg,
+    REGION_PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image input_image = 0, output_image = 0;
+    vx_matrix matrix = 0;
+    vx_float32 m[6];
+
+    CT_Image input = NULL, output = NULL;
+
+    vx_border_t border = arg_->border;
+    vx_rectangle_t rect = {0, 0, 0, 0}, rect_shft = arg_->region_shift;
+
+    ASSERT_NO_FAILURE(input  = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+    ASSERT_NO_FAILURE(output = ct_allocate_image(input->width, input->height, input->format));
+
+    ASSERT_VX_OBJECT(input_image  = ct_image_to_vx_image(input,  context), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(output_image = ct_image_to_vx_image(output, context), VX_TYPE_IMAGE);
+    ASSERT_NO_FAILURE(warp_affine_generate_matrix(m, input->width, input->height, input->width/2, input->height/2, arg_->matrix_type));
+    ASSERT_VX_OBJECT(matrix = warp_affine_create_matrix(context, m), VX_TYPE_MATRIX);
+
+    ASSERT_NO_FAILURE(vxGetValidRegionImage(input_image, &rect));
+    ALTERRECTANGLE(rect, rect_shft.start_x, rect_shft.start_y, rect_shft.end_x, rect_shft.end_y);
+    ASSERT_NO_FAILURE(vxSetImageValidRectangle(input_image, &rect));
+
+    VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxuWarpAffine(context, input_image, matrix, arg_->interp_type, output_image));
+
+    ASSERT_NO_FAILURE(output = ct_image_from_vx_image(output_image));
+
+    ASSERT_NO_FAILURE(ct_adjust_roi(input, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+    ASSERT_NO_FAILURE(warp_affine_check(input, output, arg_->interp_type, border, m));
+
+    VX_CALL(vxReleaseMatrix(&matrix));
+    VX_CALL(vxReleaseImage(&output_image));
+    VX_CALL(vxReleaseImage(&input_image));
+
+    ASSERT(matrix == 0);
+    ASSERT(output_image == 0);
+    ASSERT(input_image == 0);
+}
+
 TESTCASE_TESTS(WarpAffine,
         testNodeCreation,
         testGraphProcessing,
-        testImmediateProcessing
+        testImmediateProcessing,
+        testWithValidRegion
 )
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

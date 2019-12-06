@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
 
 #include "test_engine/test.h"
 
@@ -333,3 +335,6 @@ TEST_WITH_ARG(MinMaxLoc, testOnRandom, format_arg,
 }
 
 TESTCASE_TESTS(MinMaxLoc, testOnRandom)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+

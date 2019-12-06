@@ -16,6 +16,7 @@
  */
 
 #if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+#ifdef OPENVX_USE_U1
 
 #include "test_engine/test.h"
 
@@ -24,49 +25,75 @@
 
 //#define CT_EXECUTE_ASYNC
 
-static void referenceAbsDiff(CT_Image src0, CT_Image src1, CT_Image dst)
+static void referenceAnd(CT_Image src0, CT_Image src1, CT_Image dst)
 {
     uint32_t i, j;
 
     ASSERT(src0 && src1 && dst);
     ASSERT(src0->width == src1->width && src0->width == dst->width);
     ASSERT(src0->height == src1->height && src0->height == dst->height);
-    ASSERT(src0->format == src1->format && src1->format == VX_DF_IMAGE_S16);
-    ASSERT(dst->format == VX_DF_IMAGE_S16 || dst->format == VX_DF_IMAGE_U16);
+    ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U1);
 
-    if (dst->format == VX_DF_IMAGE_S16)
-    {
-        for (i = 0; i < dst->height; ++i)
+    for (i = 0; i < dst->height; ++i)
+        for (j = 0; j < dst->width; ++j)
         {
-            for (j = 0; j < dst->width; ++j)
-            {
-                int32_t val = src0->data.s16[i * src0->stride + j] - src1->data.s16[i * src1->stride + j];
-                val = val < 0 ? -val : val;
-                dst->data.s16[i * dst->stride + j] = CT_CAST_S16(val);
-            }
+            uint32_t xShftd = j + src0->roi.x % 8;
+            uint8_t  mask   = 1 << (xShftd % 8);
+            uint8_t  byte_val = src0->data.y[i * ct_stride_bytes(src0) + xShftd / 8] &
+                                src1->data.y[i * ct_stride_bytes(src1) + xShftd / 8];
+            dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] =
+                (dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] & ~mask) | (byte_val & mask);
         }
-    }
-    else if (dst->format == VX_DF_IMAGE_U16)
-    {
-        for (i = 0; i < dst->height; ++i)
+}
+
+static void referenceOr(CT_Image src0, CT_Image src1, CT_Image dst)
+{
+    uint32_t i, j;
+
+    ASSERT(src0 && src1 && dst);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
+    ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U1);
+
+    for (i = 0; i < dst->height; ++i)
+        for (j = 0; j < dst->width; ++j)
         {
-            for (j = 0; j < dst->width; ++j)
-            {
-                int32_t val = src0->data.s16[i * src0->stride + j] - src1->data.s16[i * src1->stride + j];
-                val = val < 0 ? -val : val;
-                dst->data.u16[i * dst->stride + j] = CT_CAST_U16(val);
-            }
+            uint32_t xShftd = j + src0->roi.x % 8;
+            uint8_t  mask   = 1 << (xShftd % 8);
+            uint8_t  byte_val = src0->data.y[i * ct_stride_bytes(src0) + xShftd / 8] |
+                                src1->data.y[i * ct_stride_bytes(src1) + xShftd / 8];
+            dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] =
+                (dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] & ~mask) | (byte_val & mask);
         }
-    }
+}
+
+static void referenceXor(CT_Image src0, CT_Image src1, CT_Image dst)
+{
+    uint32_t i, j;
+
+    ASSERT(src0 && src1 && dst);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
+    ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U1);
+
+    for (i = 0; i < dst->height; ++i)
+        for (j = 0; j < dst->width; ++j)
+        {
+            uint32_t xShftd = j + src0->roi.x % 8;
+            uint8_t  mask   = 1 << (xShftd % 8);
+            uint8_t  byte_val = src0->data.y[i * ct_stride_bytes(src0) + xShftd / 8] ^
+                                src1->data.y[i * ct_stride_bytes(src1) + xShftd / 8];
+            dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] =
+                (dst->data.y[i * ct_stride_bytes(dst) + xShftd / 8] & ~mask) | (byte_val & mask);
+        }
 }
 
 typedef vx_status (VX_API_CALL *vxuBinopFunction)(vx_context, vx_image, vx_image, vx_image);
 typedef vx_node   (VX_API_CALL *vxBinopFunction) (vx_graph, vx_image, vx_image, vx_image);
 typedef void      (*referenceFunction)(CT_Image, CT_Image, CT_Image);
 
-
-TESTCASE(vxuBinOp16s, CT_VXContext, ct_setup_vx_context, 0)
-TESTCASE(vxBinOp16s,  CT_VXContext, ct_setup_vx_context, 0)
+TESTCASE(vxuBinOp1u, CT_VXContext, ct_setup_vx_context, 0)
+TESTCASE(vxBinOp1u,  CT_VXContext, ct_setup_vx_context, 0)
 
 typedef struct {
     const char* name;
@@ -75,20 +102,20 @@ typedef struct {
     referenceFunction referenceFunc;
 } func_arg;
 
-#define FUNC_ARG(func) ARG(#func, vxu##func, vx##func##Node, reference##func)
+#define FUNC_ARG(func) ARG("_U1_/" #func, vxu##func, vx##func##Node, reference##func)
 
-TEST_WITH_ARG(vxuBinOp16s, testNegativeSizes, func_arg, FUNC_ARG(AbsDiff))
+TEST_WITH_ARG(vxuBinOp1u, testNegativeSizes, func_arg, FUNC_ARG(And), FUNC_ARG(Or), FUNC_ARG(Xor))
 {
     vx_image src1_32x32, src1_64x64, src2_32x32, src2_32x64, dst32x32, dst88x16;
     vx_context context = context_->vx_context_;
 
-    ASSERT_VX_OBJECT(src1_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src1_64x64 = vxCreateImage(context, 64, 64, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2_32x64 = vxCreateImage(context, 32, 64, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1_64x64 = vxCreateImage(context, 64, 64, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2_32x64 = vxCreateImage(context, 32, 64, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
-    ASSERT_VX_OBJECT(dst32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(dst88x16 = vxCreateImage(context, 88, 16, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst88x16 = vxCreateImage(context, 88, 16, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
     // initialize to guarantee that images are allocated
     ASSERT_NO_FAILURE(ct_fill_image_random(src1_32x32, &CT()->seed_));
@@ -109,19 +136,19 @@ TEST_WITH_ARG(vxuBinOp16s, testNegativeSizes, func_arg, FUNC_ARG(AbsDiff))
     VX_CALL(vxReleaseImage(&dst88x16));
 }
 
-TEST_WITH_ARG(vxBinOp16s, testNegativeSizes, func_arg, FUNC_ARG(AbsDiff))
+TEST_WITH_ARG(vxBinOp1u, testNegativeSizes, func_arg, FUNC_ARG(And), FUNC_ARG(Or), FUNC_ARG(Xor))
 {
     vx_image src1_32x32, src1_64x64, src2_32x32, src2_32x64, dst32x32, dst88x16;
     vx_graph graph1, graph2, graph3, graph4;
     vx_context context = context_->vx_context_;
 
-    ASSERT_VX_OBJECT(src1_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src1_64x64 = vxCreateImage(context, 64, 64, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2_32x64 = vxCreateImage(context, 32, 64, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1_64x64 = vxCreateImage(context, 64, 64, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2_32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2_32x64 = vxCreateImage(context, 32, 64, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
-    ASSERT_VX_OBJECT(dst32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(dst88x16 = vxCreateImage(context, 88, 16, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst32x32 = vxCreateImage(context, 32, 32, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst88x16 = vxCreateImage(context, 88, 16, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
     ASSERT_VX_OBJECT(graph1 = vxCreateGraph(context), VX_TYPE_GRAPH);
     ASSERT_VX_OBJECT(arg_->vxFunc(graph1, src1_32x32, src2_32x32, dst88x16), VX_TYPE_NODE);
@@ -164,27 +191,34 @@ static vx_action VX_CALLBACK inference_image_test(vx_node node)
 
     EXPECT_EQ_INT(640, width);
     EXPECT_EQ_INT(480, height);
-    EXPECT_EQ_INT(VX_DF_IMAGE_S16, format);
+    EXPECT_EQ_INT(VX_DF_IMAGE_U1, format);
 
     return VX_ACTION_CONTINUE;
 }
 
-TEST_WITH_ARG(vxBinOp16s, testInference, func_arg, FUNC_ARG(AbsDiff))
+TEST_WITH_ARG(vxBinOp1u, testInference, func_arg, FUNC_ARG(And), FUNC_ARG(Or), FUNC_ARG(Xor))
 {
-    vx_image src1, src2, dst, gr;
+    vx_image src1, src2, dst, srcU8, dstU8, gr;
+    vx_scalar sshift;
+    vx_int32 sval = 0;
     vx_graph graph;
-    vx_node n, tmp;
+    vx_node n, cn1, cn2, tmp;
     vx_context context = context_->vx_context_;
 
     ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
-    ASSERT_VX_OBJECT(src1  = vxCreateImage(context, 640, 480, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2  = vxCreateImage(context, 640, 480, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1  = vxCreateImage(context, 640, 480, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2  = vxCreateImage(context, 640, 480, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(dst   = vxCreateVirtualImage(graph, 0, 0, VX_DF_IMAGE_VIRT), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(n     = arg_->vxFunc(graph, src1, src2, dst), VX_TYPE_NODE);
 
-    // grounding
+    // grounding (add doesn't support U1 images)
+    ASSERT_VX_OBJECT(srcU8 = vxCreateImage(context, 640, 480, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dstU8 = vxCreateImage(context, 640, 480, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(gr    = vxCreateImage(context, 640, 480, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(tmp   = vxAddNode(graph, dst, src2, VX_CONVERT_POLICY_WRAP, gr), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(sshift = vxCreateScalar(context, VX_TYPE_INT32, &sval), VX_TYPE_SCALAR);
+    ASSERT_VX_OBJECT(cn1   = vxConvertDepthNode(graph, src2, srcU8, VX_CONVERT_POLICY_SATURATE, sshift), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(cn2   = vxConvertDepthNode(graph, dst,  dstU8, VX_CONVERT_POLICY_SATURATE, sshift), VX_TYPE_NODE);
+    ASSERT_VX_OBJECT(tmp   = vxAddNode(graph, dstU8, srcU8, VX_CONVERT_POLICY_WRAP, gr), VX_TYPE_NODE);
 
     // test
     inference_image = dst;
@@ -192,10 +226,15 @@ TEST_WITH_ARG(vxBinOp16s, testInference, func_arg, FUNC_ARG(AbsDiff))
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxProcessGraph(graph));
 
     VX_CALL(vxReleaseNode(&n));
+    VX_CALL(vxReleaseNode(&cn1));
+    VX_CALL(vxReleaseNode(&cn2));
     VX_CALL(vxReleaseNode(&tmp));
+    VX_CALL(vxReleaseScalar(&sshift));
     VX_CALL(vxReleaseImage(&src1));
     VX_CALL(vxReleaseImage(&src2));
     VX_CALL(vxReleaseImage(&dst));
+    VX_CALL(vxReleaseImage(&srcU8));
+    VX_CALL(vxReleaseImage(&dstU8));
     VX_CALL(vxReleaseImage(&gr));
     VX_CALL(vxReleaseGraph(&graph));
 }
@@ -209,7 +248,7 @@ typedef struct {
     referenceFunction referenceFunc;
 } fuzzy_arg;
 
-#define FUZZY_ARG(func,w,h) ARG(#func ": " #w "x" #h, w, h, vxu##func, vx##func##Node, reference##func)
+#define FUZZY_ARG(func,w,h) ARG("_U1_/" #func ": " #w "x" #h, w, h, vxu##func, vx##func##Node, reference##func)
 
 #define BINOP_SIZE_ARGS(func)       \
     FUZZY_ARG(func, 640, 480),      \
@@ -222,15 +261,15 @@ typedef struct {
     FUZZY_ARG(func, 1920, 1080),    \
     ARG_EXTENDED_END()
 
-TEST_WITH_ARG(vxuBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
+TEST_WITH_ARG(vxuBinOp1u, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(And), BINOP_SIZE_ARGS(Or), BINOP_SIZE_ARGS(Xor))
 {
     vx_image src1, src2, dst;
     CT_Image ref1, ref2, refdst, vxdst;
     vx_context context = context_->vx_context_;
 
-    ASSERT_VX_OBJECT(src1 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16),   VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16),   VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(dst  = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst  = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
     ASSERT_NO_FAILURE(ct_fill_image_random(src1, &CT()->seed_));
     ASSERT_NO_FAILURE(ct_fill_image_random(src2, &CT()->seed_));
@@ -240,7 +279,7 @@ TEST_WITH_ARG(vxuBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
     ref1  = ct_image_from_vx_image(src1);
     ref2  = ct_image_from_vx_image(src2);
     vxdst = ct_image_from_vx_image(dst);
-    refdst = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_S16);
+    refdst = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_U1);
 
     arg_->referenceFunc(ref1, ref2, refdst);
 
@@ -255,7 +294,7 @@ TEST_WITH_ARG(vxuBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
     EXPECT_EQ_PTR(NULL, src2);
 }
 
-TEST_WITH_ARG(vxBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
+TEST_WITH_ARG(vxBinOp1u, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(And), BINOP_SIZE_ARGS(Or), BINOP_SIZE_ARGS(Xor))
 {
     vx_image src1, src2, dst;
     vx_graph graph;
@@ -263,10 +302,10 @@ TEST_WITH_ARG(vxBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
     vx_context context = context_->vx_context_;
 
     ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
-    ASSERT_VX_OBJECT(dst   = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst   = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
-    ASSERT_VX_OBJECT(src1 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16),   VX_TYPE_IMAGE);
-    ASSERT_VX_OBJECT(src2 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_S16),   VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src1 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(src2 = vxCreateImage(context, arg_->width, arg_->height, VX_DF_IMAGE_U1), VX_TYPE_IMAGE);
 
     ASSERT_NO_FAILURE(ct_fill_image_random(src1, &CT()->seed_));
     ASSERT_NO_FAILURE(ct_fill_image_random(src2, &CT()->seed_));
@@ -285,7 +324,7 @@ TEST_WITH_ARG(vxBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
     ref1  = ct_image_from_vx_image(src1);
     ref2  = ct_image_from_vx_image(src2);
     vxdst = ct_image_from_vx_image(dst);
-    refdst = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_S16);
+    refdst = ct_allocate_image(arg_->width, arg_->height, VX_DF_IMAGE_U1);
 
     arg_->referenceFunc(ref1, ref2, refdst);
 
@@ -297,7 +336,8 @@ TEST_WITH_ARG(vxBinOp16s, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff))
     VX_CALL(vxReleaseGraph(&graph));
 }
 
-TESTCASE_TESTS(vxuBinOp16s, DISABLED_testNegativeSizes,                testFuzzy)
-TESTCASE_TESTS(vxBinOp16s,  DISABLED_testNegativeSizes, testInference, testFuzzy)
+TESTCASE_TESTS(vxuBinOp1u, DISABLED_testNegativeSizes,                testFuzzy)
+TESTCASE_TESTS(vxBinOp1u,  DISABLED_testNegativeSizes, testInference, testFuzzy)
 
+#endif //OPENVX_USE_U1
 #endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

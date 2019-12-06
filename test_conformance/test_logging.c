@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -31,42 +31,42 @@ static void VX_CALLBACK test_log_callback(vx_context context, vx_reference ref, 
 
 TEST(Logging, Cummulative)
 {
-    vx_image image = 0;
+    vx_graph graph = 0;
     vx_context context = vxCreateContext();
 
     ASSERT_VX_OBJECT(context, VX_TYPE_CONTEXT);
     CT_RegisterForGarbageCollection(context, ct_destroy_vx_context, CT_GC_OBJECT);
-    ASSERT_VX_OBJECT(image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
 
     // normall logging
     vxRegisterLogCallback(context, test_log_callback, vx_false_e);
     log_callback_is_called = vx_false_e;
-    vxAddLogEntry((vx_reference)image, VX_FAILURE, "hello world", 1, 2, 3);
+    vxAddLogEntry((vx_reference)graph, VX_FAILURE, "hello world", 1, 2, 3);
     ASSERT(log_callback_is_called);
 
     // clear callback
     vxRegisterLogCallback(context, NULL, vx_true_e);
     log_callback_is_called = vx_false_e;
-    vxAddLogEntry((vx_reference)image, VX_FAILURE, "hello world", 4, 5, 6);
+    vxAddLogEntry((vx_reference)graph, VX_FAILURE, "hello world", 4, 5, 6);
     ASSERT(!log_callback_is_called);
 
     // restore callback
     vxRegisterLogCallback(context, test_log_callback, vx_true_e);
 
     // disable logs for image
-    VX_CALL(vxDirective((vx_reference)image, VX_DIRECTIVE_DISABLE_LOGGING));
+    VX_CALL(vxDirective((vx_reference)graph, VX_DIRECTIVE_DISABLE_LOGGING));
     log_callback_is_called = vx_false_e;
-    vxAddLogEntry((vx_reference)image, VX_FAILURE, "hello world", 4, 5, 6);
+    vxAddLogEntry((vx_reference)graph, VX_FAILURE, "hello world", 4, 5, 6);
     ASSERT(!log_callback_is_called);
 
     // turn on logs once again
-    VX_CALL(vxDirective((vx_reference)image, VX_DIRECTIVE_ENABLE_LOGGING));
+    VX_CALL(vxDirective((vx_reference)graph, VX_DIRECTIVE_ENABLE_LOGGING));
     log_callback_is_called = vx_false_e;
-    vxAddLogEntry((vx_reference)image, VX_FAILURE, "%*s", VX_MAX_LOG_MESSAGE_LEN + 20, ""); // 20 symbols longer string than limit
+    vxAddLogEntry((vx_reference)graph, VX_FAILURE, "%*s", VX_MAX_LOG_MESSAGE_LEN + 20, ""); // 20 symbols longer string than limit
     ASSERT(log_callback_is_called);
 
-    VX_CALL(vxReleaseImage(&image));
-    ASSERT(image == 0);
+    VX_CALL(vxReleaseGraph(&graph));
+    ASSERT(graph == 0);
 }
 
 

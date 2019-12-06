@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 
 #include <VX/vx.h>
@@ -27,8 +29,8 @@ static void referenceAbsDiff(CT_Image src0, CT_Image src1, CT_Image dst)
     uint32_t i, j;
 
     ASSERT(src0 && src1 && dst);
-    ASSERT(src0->width = src1->width && src0->width == dst->width);
-    ASSERT(src0->height = src1->height && src0->height == dst->height);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
     ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U8);
 
     for (i = 0; i < dst->height; ++i)
@@ -44,8 +46,8 @@ static void referenceAnd(CT_Image src0, CT_Image src1, CT_Image dst)
     uint32_t i, j;
 
     ASSERT(src0 && src1 && dst);
-    ASSERT(src0->width = src1->width && src0->width == dst->width);
-    ASSERT(src0->height = src1->height && src0->height == dst->height);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
     ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U8);
 
     for (i = 0; i < dst->height; ++i)
@@ -58,8 +60,8 @@ static void referenceOr(CT_Image src0, CT_Image src1, CT_Image dst)
     uint32_t i, j;
 
     ASSERT(src0 && src1 && dst);
-    ASSERT(src0->width = src1->width && src0->width == dst->width);
-    ASSERT(src0->height = src1->height && src0->height == dst->height);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
     ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U8);
 
     for (i = 0; i < dst->height; ++i)
@@ -72,8 +74,8 @@ static void referenceXor(CT_Image src0, CT_Image src1, CT_Image dst)
     uint32_t i, j;
 
     ASSERT(src0 && src1 && dst);
-    ASSERT(src0->width = src1->width && src0->width == dst->width);
-    ASSERT(src0->height = src1->height && src0->height == dst->height);
+    ASSERT(src0->width == src1->width && src0->width == dst->width);
+    ASSERT(src0->height == src1->height && src0->height == dst->height);
     ASSERT(src0->format == dst->format && src1->format == dst->format && dst->format == VX_DF_IMAGE_U8);
 
     for (i = 0; i < dst->height; ++i)
@@ -320,3 +322,5 @@ TEST_WITH_ARG(vxBinOp8u, testFuzzy, fuzzy_arg, BINOP_SIZE_ARGS(AbsDiff), BINOP_S
 
 TESTCASE_TESTS(vxuBinOp8u, DISABLED_testNegativeSizes,                testFuzzy)
 TESTCASE_TESTS(vxBinOp8u,  DISABLED_testNegativeSizes, testInference, testFuzzy)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

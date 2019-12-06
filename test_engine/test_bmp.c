@@ -555,9 +555,19 @@ int ct_write_bmp(const char* filename, CT_Image image)
 {
     if( image )
     {
-        int channels = ct_channels(image->format);
-        return writeBMP(filename, image->data.y, (int)ct_stride_bytes(image),
-                        (int)image->width, (int)image->height, channels);
+        CT_Image wrt_image;
+        if (image->format == VX_DF_IMAGE_U1)
+        {
+            wrt_image = ct_allocate_image(image->width, image->height, VX_DF_IMAGE_U8);
+            U1_ct_image_to_U8_ct_image(image, wrt_image);
+        }
+        else
+        {
+            wrt_image = image;
+        }
+        int channels = ct_channels(wrt_image->format);
+        return writeBMP(filename, wrt_image->data.y, (int)ct_stride_bytes(wrt_image),
+                        (int)wrt_image->width, (int)wrt_image->height, channels);
     }
     return -1;
 }

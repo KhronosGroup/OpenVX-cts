@@ -13,6 +13,8 @@ The following CMake variables are supported:
 
 * OPENVX_USE_NN      - Compile neural network test case or not.
 
+* OPENVX_USE_U1      - Compile binary image test cases or not.
+
 * OPENVX_LIBRARIES   - semicolon separated list of shared/static libraries to link
                        with. If there are link order dependencies between your
                        libraries, then the libraries have to be specified in
@@ -41,8 +43,8 @@ Use the following commands to build the test suite for the OpenVX baseline only:
     cmake --build .
 
 
-Use the following commands to build the test suite with import-export and
-neural network KHR extensions activated:
+Use the following commands to build the test suite with import-export, neural
+network and binary image KHR extensions activated:
 
     export OPENVX_DIR=<path to prebuilt OpenVX>
     cd <build dir>
@@ -51,6 +53,7 @@ neural network KHR extensions activated:
         -DOPENVX_LIBRARIES=$OPENVX_DIR/lib/libopenvx.so\;$OPENVX_DIR/lib/libvxu.so\;pthread\;dl\;m\;rt \
         -DOPENVX_USE_IX=ON \
         -DOPENVX_USE_NN=ON \
+        -DOPENVX_USE_U1=ON \
         ../conformance_tests/
     cmake --build .
 

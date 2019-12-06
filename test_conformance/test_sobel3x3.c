@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -335,3 +337,5 @@ TEST_WITH_ARG(Sobel3x3, testImmediateProcessing, Filter_Arg,
 }
 
 TESTCASE_TESTS(Sobel3x3, testNodeCreation, testGraphProcessing, testImmediateProcessing)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

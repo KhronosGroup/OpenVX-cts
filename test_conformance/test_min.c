@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+#ifdef OPENVX_USE_ENHANCED_VISION
+
 #include <string.h>
 #include <VX/vx.h>
 #include <VX/vxu.h>
@@ -182,3 +184,5 @@ TEST_WITH_ARG(Min, testvxMin, format_arg,
 
 }
 TESTCASE_TESTS(Min, testvxMin)
+
+#endif //OPENVX_USE_ENHANCED_VISION

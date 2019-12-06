@@ -1,4 +1,4 @@
-/* 
+/*
 
  * Copyright (c) 2012-2017 The Khronos Group Inc.
  *
@@ -337,6 +337,14 @@ static int filterTestName(const char* test_name, const char* fullFilter)
         result = 0;
     }
 
+#ifndef OPENVX_USE_U1
+    // Filter out tests whose name include the tag "_U1_" if the test suite isn't configured to test U1 conformance
+    if (result && strstr(test_name, "_U1_") != NULL)
+    {
+        result = 0;
+    }
+#endif
+
     return result;
 }
 
@@ -518,6 +526,62 @@ int CT_main(int argc, char* argv[], const char* version_str)
     int total_openvx_passed_ix_tests = 0;
     int total_openvx_failed_ix_tests = 0;
 #endif
+#ifdef OPENVX_USE_PIPELINING
+    int total_openvx_pipe_tests = 0;
+    int total_openvx_passed_pipe_tests = 0;
+    int total_openvx_failed_pipe_tests = 0;
+#endif
+#ifdef OPENVX_USE_STREAMING
+    int total_openvx_stream_tests = 0;
+    int total_openvx_passed_stream_tests = 0;
+    int total_openvx_failed_stream_tests = 0;
+#endif
+#ifdef OPENVX_USE_USER_DATA_OBJECT
+    int total_openvx_udo_tests = 0;
+    int total_openvx_passed_udo_tests = 0;
+    int total_openvx_failed_udo_tests = 0;
+#endif
+#ifdef OPENVX_USE_U1
+    int total_openvx_u1_tests = 0;
+    int total_openvx_passed_u1_tests = 0;
+    int total_openvx_failed_u1_tests = 0;
+#endif
+#ifdef OPENVX_CONFORMANCE_VISION
+    int total_openvx_vision_tests = 0;
+    int total_openvx_passed_vision_tests = 0;
+    int total_openvx_failed_vision_tests = 0;
+#define vision_test_num 51
+    int conformance_vision_status = 0;
+    const char* vision_test[vision_test_num] = {"vxuConvertDepth", "vxConvertDepth", "ChannelCombine", "ChannelExtract", "ColorConvert",
+                                   "vxuAddSub", "vxAddSub", "vxuNot", "vxNot", "vxuBinOp1u",
+                                   "vxBinOp1u", "vxuBinOp8u", "vxBinOp8u", "vxuBinOp16s", "vxBinOp16s",
+                                   "vxuMultiply", "vxMultiply", "Histogram", "EqualizeHistogram", "MeanStdDev",
+                                   "MinMaxLoc", "WeightedAverage", "Threshold", "Box3x3", "Convolve",
+                                   "Dilate3x3", "Erode3x3", "Gaussian3x3", "Median3x3", "Sobel3x3",
+                                   "NonLinearFilter", "Integral", "Magnitude", "Phase", "FastCorners",
+                                   "HarrisCorners", "Scale", "WarpAffine", "WarpPerspective", "Remap",
+                                   "GaussianPyramid", "HalfScaleGaussian", "LaplacianPyramid", "LaplacianReconstruct", "vxuCanny",
+                                   "vxCanny", "OptFlowPyrLK", "LUT", "Accumulate", "AccumulateSquare", "AccumulateWeighted"};
+#endif
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
+    int total_openvx_neural_networks_tests = 0;
+    int total_openvx_passed_neural_networks_tests = 0;
+    int total_openvx_failed_neural_networks_tests = 0;
+#endif
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+    int total_openvx_nnef_tests = 0;
+    int total_openvx_passed_nnef_tests = 0;
+    int total_openvx_failed_nnef_tests = 0;
+#endif
+#ifdef OPENVX_USE_ENHANCED_VISION
+    int total_openvx_use_enhanced_vision_tests = 0;
+    int total_openvx_passed_use_enhanced_vision_tests = 0;
+    int total_openvx_failed_use_enhanced_vision_tests = 0;
+#define enhance_vision_num  13
+    int conformance_enhanced_vision_status = 0;
+    const char* enhanced_vision_test[enhance_vision_num] = {"Min", "Max", "Nonmaxsuppression", "TensorOp", "LBP", "BilateralFilter",
+    "MatchTemplate", "Houghlinesp", "Copy", "HogCells", "HogFeatures", "ControlFlow", "Scalar"};
+#endif
     //====================================================
 
     int use_global_context = 0;
@@ -671,6 +735,7 @@ int CT_main(int argc, char* argv[], const char* version_str)
 
     for (testcase = g_firstTestCase; testcase; testcase = testcase->next_)
     {
+        int test_ran = 0;
         int run_tests = 0;
         int extended_flag = 0;
         struct CT_TestEntry* test = testcase->tests_;
@@ -678,16 +743,48 @@ int CT_main(int argc, char* argv[], const char* version_str)
 #ifdef CT_TEST_TIME
         int64_t timestart_testCase = CT_getTickCount();
 #endif
+#ifdef OPENVX_USE_U1
+        // Counter for the number of U1 tests in the given testcase
+        int run_tests_u1 = 0;
+#endif
 
         for(; test; test = test->next_)
         {
             if (!test->args_)
-                run_tests += run_test(testcase, test, 0, run_tests, &extended_flag);
+            {
+                test_ran = run_test(testcase, test, 0, run_tests, &extended_flag);
+                run_tests += test_ran;
+#ifdef OPENVX_USE_U1
+                // Look for the "_U1_" tag in the full test name
+                char test_name_full[1024];
+                void *parg = get_test_params(test, 0);
+                get_test_name(test_name_full, sizeof(test_name_full), testcase, test, parg, 0);
+
+                if (test_ran && strstr(test_name_full, "_U1_") != NULL) {
+                    total_openvx_u1_tests++;
+                    run_tests_u1++;
+                }
+#endif
+            }
+
             else
             {
                 int narg = 0;
                 for (; narg < test->args_count_; narg++)
-                    run_tests += run_test(testcase, test, narg, run_tests, &extended_flag);
+                {
+                    test_ran = run_test(testcase, test, narg, run_tests, &extended_flag);
+                    run_tests += test_ran;
+#ifdef OPENVX_USE_U1
+                    char test_name_full[1024];
+                    void *parg = get_test_params(test, narg);
+                    get_test_name(test_name_full, sizeof(test_name_full), testcase, test, parg, narg);
+
+                    if (test_ran && strstr(test_name_full, "_U1_") != NULL) {
+                        total_openvx_u1_tests++;
+                        run_tests_u1++;
+                    }
+#endif
+                }
             }
         }
 
@@ -708,17 +805,74 @@ int CT_main(int argc, char* argv[], const char* version_str)
             if (strcmp("TensorNN", testcase->name_) == 0) {
                 total_openvx_nn_tests += run_tests;
             }
-            else
 #endif
 #ifdef OPENVX_USE_IX
             if (strcmp("ExtensionObject", testcase->name_) == 0) {
                     total_openvx_ix_tests += run_tests;
             }
-            else
 #endif
-            {
-                    total_openvx_core_tests += run_tests;
+#ifdef OPENVX_USE_PIPELINING
+            if (strcmp("GraphPipeline", testcase->name_) == 0) {
+                    total_openvx_pipe_tests += run_tests;
             }
+#endif
+#ifdef OPENVX_USE_STREAMING
+            if (strcmp("GraphStreaming", testcase->name_) == 0) {
+                    total_openvx_stream_tests += run_tests;
+            }
+#endif
+#ifdef OPENVX_USE_USER_DATA_OBJECT
+            if (strcmp("UserDataObject", testcase->name_) == 0) {
+                    total_openvx_udo_tests += run_tests;
+            }
+#endif
+#ifdef OPENVX_CONFORMANCE_VISION
+            for (int i = 0; i < vision_test_num; i++) {
+                if (strcmp(vision_test[i], testcase->name_) == 0) {
+                    conformance_vision_status = 1;
+                    i = vision_test_num;
+                }
+            }
+            if (conformance_vision_status == 1) {
+                total_openvx_vision_tests += run_tests;
+            }
+#endif
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
+#ifdef OPENVX_USE_NN
+            if (strcmp("TensorNN", testcase->name_) == 0) {
+                total_openvx_neural_networks_tests += run_tests;
+            }
+#endif
+#ifdef OPENVX_USE_NN_16
+            if (strcmp("TensorNetworks", testcase->name_) == 0) {
+                total_openvx_neural_networks_tests += run_tests;
+            }
+#endif
+#endif
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+            if (strcmp("TensorNNEFImport", testcase->name_) == 0) {
+                total_openvx_nnef_tests += run_tests;
+            }
+#endif
+#ifdef OPENVX_USE_ENHANCED_VISION
+            for (int i = 0; i < enhance_vision_num; i++) {
+                if (strcmp(enhanced_vision_test[i], testcase->name_) == 0) {
+                    conformance_enhanced_vision_status = 1;
+                    i = enhance_vision_num;
+                }
+            }
+            if (conformance_enhanced_vision_status == 1) {
+                total_openvx_use_enhanced_vision_tests += run_tests;
+            }
+#endif
+            else
+            {
+#ifdef OPENVX_USE_U1
+                total_openvx_core_tests -= run_tests_u1;
+#endif
+                total_openvx_core_tests += run_tests;
+            }
+
             //====================================================
 
             total_run_tests += run_tests;
@@ -750,6 +904,24 @@ int CT_main(int argc, char* argv[], const char* version_str)
 
 
                 //================ OpenVX Specific ===================
+#ifdef OPENVX_CONFORMANCE_VISION
+                for (int i = 0; i < vision_test_num; i++) {
+                    conformance_vision_status = 0;
+                    if (strncmp(vision_test[i], test_name, sizeof(vision_test[i]) - 1) == 0) {
+                        conformance_vision_status = 1;
+                        i = vision_test_num;
+                    }
+                }
+#endif
+#ifdef OPENVX_USE_ENHANCED_VISION
+                for (int i = 0; i < enhance_vision_num; i++) {
+                    conformance_enhanced_vision_status = 0;
+                    if (strncmp(enhanced_vision_test[i], test_name, sizeof(enhanced_vision_test[i]) - 1) == 0) {
+                        conformance_enhanced_vision_status = 1;
+                        i = enhance_vision_num;
+            }
+        }
+#endif
 #ifdef OPENVX_USE_NN
                 if (strncmp("TensorNN", test_name, sizeof("TensorNN") - 1) == 0) {
                     total_openvx_failed_nn_tests ++;
@@ -759,6 +931,62 @@ int CT_main(int argc, char* argv[], const char* version_str)
 #ifdef OPENVX_USE_IX
                 if (strncmp("ExtensionObject", test_name, sizeof("ExtensionObject") - 1) == 0) {
                     total_openvx_failed_ix_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_PIPELINING
+                if (strncmp("GraphPipeline", test_name, sizeof("GraphPipeline") - 1) == 0) {
+                    total_openvx_failed_pipe_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_STREAMING
+                if (strncmp("GraphStreaming", test_name, sizeof("GraphStreaming") - 1) == 0) {
+                    total_openvx_failed_stream_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_USER_DATA_OBJECT
+                if (strncmp("UserDataObject", test_name, sizeof("UserDataObject") - 1) == 0) {
+                    total_openvx_failed_udo_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_CONFORMANCE_VISION
+                if (conformance_vision_status == 1) {
+                    total_openvx_failed_vision_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
+#ifdef OPENVX_USE_NN
+                if (strncmp("TensorNN", test_name, sizeof("TensorNN") - 1) == 0) {
+                    total_openvx_failed_neural_networks_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_NN_16
+                if (strncmp("TensorNetworks", test_name, sizeof("TensorNetworks") - 1) == 0) {
+                    total_openvx_failed_neural_networks_tests ++;
+                }
+                else
+#endif
+#endif
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+                if (strncmp("TensorNNEFImport", test_name, sizeof("TensorNNEFImport") - 1) == 0) {
+                    total_openvx_failed_nnef_tests ++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_ENHANCED_VISION
+                if (conformance_enhanced_vision_status == 1) {
+                    total_openvx_failed_use_enhanced_vision_tests++;
+                }
+                else
+#endif
+#ifdef OPENVX_USE_U1
+                if (strstr(test_name, "_U1_") != NULL) {
+                    total_openvx_failed_u1_tests ++;
                 }
                 else
 #endif
@@ -800,6 +1028,62 @@ int CT_main(int argc, char* argv[], const char* version_str)
                total_openvx_ix_tests, total_openvx_passed_ix_tests, total_openvx_failed_ix_tests,
                (total_openvx_failed_ix_tests==0?"PASSED":"FAILED")
                );
+#endif
+#ifdef OPENVX_USE_PIPELINING
+        total_openvx_passed_pipe_tests = total_openvx_pipe_tests - total_openvx_failed_pipe_tests;
+        printf("To be conformant to the Pipelining extension, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+               total_openvx_pipe_tests, total_openvx_passed_pipe_tests, total_openvx_failed_pipe_tests,
+               (total_openvx_failed_pipe_tests==0?"PASSED":"FAILED")
+               );
+#endif
+#ifdef OPENVX_USE_STREAMING
+        total_openvx_passed_stream_tests = total_openvx_stream_tests - total_openvx_failed_stream_tests;
+        printf("To be conformant to the Streaming extension, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+               total_openvx_stream_tests, total_openvx_passed_stream_tests, total_openvx_failed_stream_tests,
+               (total_openvx_failed_stream_tests==0?"PASSED":"FAILED")
+               );
+#endif
+#ifdef OPENVX_USE_USER_DATA_OBJECT
+        total_openvx_passed_udo_tests = total_openvx_udo_tests - total_openvx_failed_udo_tests;
+        printf("To be conformant to the User Data Object extension, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+               total_openvx_udo_tests, total_openvx_passed_udo_tests, total_openvx_failed_udo_tests,
+               (total_openvx_failed_udo_tests==0?"PASSED":"FAILED")
+               );
+#endif
+#ifdef OPENVX_USE_U1
+        total_openvx_passed_u1_tests = total_openvx_u1_tests - total_openvx_failed_u1_tests;
+        printf("To be conformant to the U1 conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+               total_openvx_u1_tests, total_openvx_passed_u1_tests, total_openvx_failed_u1_tests,
+               (total_openvx_failed_u1_tests==0?"PASSED":"FAILED")
+               );
+#endif
+#ifdef OPENVX_CONFORMANCE_VISION
+        total_openvx_passed_vision_tests = total_openvx_vision_tests - total_openvx_failed_vision_tests;
+        printf("To be conformant to the Vision conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+            total_openvx_vision_tests, total_openvx_passed_vision_tests, total_openvx_failed_vision_tests,
+            (total_openvx_failed_vision_tests==0?"PASSED":"FAILED")
+            );
+#endif
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
+        total_openvx_passed_neural_networks_tests = total_openvx_neural_networks_tests - total_openvx_failed_neural_networks_tests;
+        printf("To be conformant to the Neural Networks conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+            total_openvx_neural_networks_tests, total_openvx_passed_neural_networks_tests, total_openvx_failed_neural_networks_tests,
+            (total_openvx_failed_neural_networks_tests==0?"PASSED":"FAILED")
+            );
+#endif
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+        total_openvx_passed_nnef_tests = total_openvx_nnef_tests - total_openvx_failed_nnef_tests;
+        printf("To be conformant to the Vision NNEF conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+            total_openvx_nnef_tests, total_openvx_passed_nnef_tests, total_openvx_failed_nnef_tests,
+            (total_openvx_failed_nnef_tests==0?"PASSED":"FAILED")
+            );
+#endif
+#ifdef OPENVX_USE_ENHANCED_VISION
+        total_openvx_passed_use_enhanced_vision_tests = total_openvx_use_enhanced_vision_tests - total_openvx_failed_use_enhanced_vision_tests;
+        printf("To be conformant to the enhanced vision conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
+            total_openvx_use_enhanced_vision_tests, total_openvx_passed_use_enhanced_vision_tests, total_openvx_failed_use_enhanced_vision_tests,
+            (total_openvx_failed_use_enhanced_vision_tests == 0 ? "PASSED" : "FAILED")
+            );
 #endif
 
         printf("Note: The %d disabled tests are optional and are not considered for conformance.\n",

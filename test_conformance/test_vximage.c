@@ -15,35 +15,113 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include <string.h>
 #include <VX/vx.h>
 #include <VX/vxu.h>
 
 #include "test_engine/test.h"
 
+/* ***************************************************************************
+//  local auxiliary function definitions (only those that need early definitions)
+*/
+static void mem_free(void**ptr);
+
+static CT_Image own_generate_rand_image(const char* fileName, int width, int height, vx_df_image format);
+
+static vx_uint32 own_plane_subsampling_x(vx_df_image format, vx_uint32 plane);
+
+static vx_uint32 own_plane_subsampling_y(vx_df_image format, vx_uint32 plane);
+
+static void own_allocate_image_ptrs(vx_df_image format, int width, int height, vx_uint32* nplanes, void* ptrs[],
+    vx_imagepatch_addressing_t addr[], vx_pixel_value_t* val);
+
+
+/* ***************************************************************************
+//  Image tests
+*/
 TESTCASE(Image, CT_VXContext, ct_setup_vx_context, 0)
 
 typedef struct
 {
     const char* name;
     vx_df_image format;
-} format_arg;
+} ImageFormat_Arg;
 
-TEST_WITH_ARG(Image, testRngImageCreation, format_arg,
-    ARG_ENUM(VX_DF_IMAGE_U8),
-    ARG_ENUM(VX_DF_IMAGE_U16),
-    ARG_ENUM(VX_DF_IMAGE_S16),
-    ARG_ENUM(VX_DF_IMAGE_U32),
-    ARG_ENUM(VX_DF_IMAGE_S32),
-    ARG_ENUM(VX_DF_IMAGE_RGB),
-    ARG_ENUM(VX_DF_IMAGE_RGBX),
-    ARG_ENUM(VX_DF_IMAGE_NV12),
-    ARG_ENUM(VX_DF_IMAGE_NV21),
-    ARG_ENUM(VX_DF_IMAGE_UYVY),
-    ARG_ENUM(VX_DF_IMAGE_YUYV),
-    ARG_ENUM(VX_DF_IMAGE_IYUV),
-    ARG_ENUM(VX_DF_IMAGE_YUV4),
+typedef struct
+{
+    const char* name;
+    int width;
+    int height;
+    vx_df_image format;
+} ImageDims_Arg;
+
+typedef struct
+{
+    const char* testName;
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
+    const char* fileName;
+    int width;
+    int height;
+    vx_df_image format;
+    vx_bool have_roi;
+} ImageGenerator_Arg;
+
+#define VX_PLANE_MAX (4)
+
+#define IMAGE_FORMAT_PARAMETERS_BASELINE \
+    ARG_ENUM(VX_DF_IMAGE_U8), \
+    ARG_ENUM(VX_DF_IMAGE_U16), \
+    ARG_ENUM(VX_DF_IMAGE_S16), \
+    ARG_ENUM(VX_DF_IMAGE_U32), \
+    ARG_ENUM(VX_DF_IMAGE_S32), \
+    ARG_ENUM(VX_DF_IMAGE_RGB), \
+    ARG_ENUM(VX_DF_IMAGE_RGBX), \
+    ARG_ENUM(VX_DF_IMAGE_NV12), \
+    ARG_ENUM(VX_DF_IMAGE_NV21), \
+    ARG_ENUM(VX_DF_IMAGE_UYVY), \
+    ARG_ENUM(VX_DF_IMAGE_YUYV), \
+    ARG_ENUM(VX_DF_IMAGE_IYUV), \
+    ARG_ENUM(VX_DF_IMAGE_YUV4)
+
+#define ADD_IMAGE_FORMATS(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U8", __VA_ARGS__, VX_DF_IMAGE_U8)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U16", __VA_ARGS__, VX_DF_IMAGE_U16)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S16", __VA_ARGS__, VX_DF_IMAGE_S16)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U32", __VA_ARGS__, VX_DF_IMAGE_U32)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S32", __VA_ARGS__, VX_DF_IMAGE_S32)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGB", __VA_ARGS__, VX_DF_IMAGE_RGB)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGBX", __VA_ARGS__, VX_DF_IMAGE_RGBX)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_UYVY", __VA_ARGS__, VX_DF_IMAGE_UYVY)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUYV", __VA_ARGS__, VX_DF_IMAGE_YUYV)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV))
+
+#define ADD_IMAGE_FORMAT_U1(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U1", __VA_ARGS__, VX_DF_IMAGE_U1))
+
+#define ADD_IMAGE_ROI(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/ROI=true", __VA_ARGS__, vx_true_e)), \
+    CT_EXPAND(nextmacro(testArgName "/ROI=false", __VA_ARGS__, vx_false_e))
+
+#define NO_IMAGE_ROI(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "", __VA_ARGS__, vx_false_e))
+
+#define TEST_IMAGE_RANDOM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS(     "rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   NO_IMAGE_ROI, ARG, own_generate_rand_image, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, NO_IMAGE_ROI, ARG, own_generate_rand_image, NULL)
+
+#define TEST_IMAGE_RANDOM_IMAGE_WITH_ROI_PARAMETERS \
+    CT_GENERATE_PARAMETERS(     "rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   ADD_IMAGE_ROI, ARG, own_generate_rand_image, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, ADD_IMAGE_ROI, ARG, own_generate_rand_image, NULL)
+
+TEST_WITH_ARG(Image, testRngImageCreation, ImageFormat_Arg,
+    IMAGE_FORMAT_PARAMETERS_BASELINE,
     ARG_ENUM(VX_DF_IMAGE_VIRT),
+    ARG("_U1_/VX_DF_IMAGE_U1", VX_DF_IMAGE_U1),
 )
 {
     vx_context  context = context_->vx_context_;
@@ -51,15 +129,13 @@ TEST_WITH_ARG(Image, testRngImageCreation, format_arg,
     vx_image    clone   = 0;
     vx_df_image format  = arg_->format;
 
-    image = vxCreateImage(context, 4, 4, format);
+    image = vxCreateImage(context, 8, 8, format);
 
     if (format == VX_DF_IMAGE_VIRT)
     {
         ASSERT_NE_VX_STATUS(VX_SUCCESS, vxGetStatus((vx_reference)image));
         PASS();
     }
-
-    // VX_CALL(ct_dump_vx_image_info(image));
 
     ASSERT_VX_OBJECT(image, VX_TYPE_IMAGE);
 
@@ -73,23 +149,33 @@ TEST_WITH_ARG(Image, testRngImageCreation, format_arg,
 
     ASSERT(image == 0);
     ASSERT(clone == 0);
-}
+} /* testRngImageCreation() */
 
-TEST_WITH_ARG(Image, testVirtualImageCreation, format_arg,
-    ARG_ENUM(VX_DF_IMAGE_U8),
-    ARG_ENUM(VX_DF_IMAGE_U16),
-    ARG_ENUM(VX_DF_IMAGE_S16),
-    ARG_ENUM(VX_DF_IMAGE_U32),
-    ARG_ENUM(VX_DF_IMAGE_S32),
-    ARG_ENUM(VX_DF_IMAGE_RGB),
-    ARG_ENUM(VX_DF_IMAGE_RGBX),
-    ARG_ENUM(VX_DF_IMAGE_NV12),
-    ARG_ENUM(VX_DF_IMAGE_NV21),
-    ARG_ENUM(VX_DF_IMAGE_UYVY),
-    ARG_ENUM(VX_DF_IMAGE_YUYV),
-    ARG_ENUM(VX_DF_IMAGE_IYUV),
-    ARG_ENUM(VX_DF_IMAGE_YUV4),
+/*
+// Creation and destruction of U1 images should be supported even without the U1 conformance profile
+*/
+TEST(Image, testImageCreation_U1)
+{
+    // Test vxCreateImage()
+    vx_context context = context_->vx_context_;
+    vx_image image = 0;
+    vx_uint32 width = 16;
+    vx_uint32 height = 16;
+    vx_df_image format = VX_DF_IMAGE_U1;
+
+    image = vxCreateImage(context, width, height, format);
+
+    ASSERT_VX_OBJECT(image, VX_TYPE_IMAGE);
+
+    VX_CALL(vxReleaseImage(&image));
+
+    ASSERT(image == 0);
+} /* testImageCreation_U1() */
+
+TEST_WITH_ARG(Image, testVirtualImageCreation, ImageFormat_Arg,
+    IMAGE_FORMAT_PARAMETERS_BASELINE,
     ARG_ENUM(VX_DF_IMAGE_VIRT),
+    ARG_ENUM(VX_DF_IMAGE_U1),
 )
 {
     vx_context context = context_->vx_context_;
@@ -113,16 +199,9 @@ TEST_WITH_ARG(Image, testVirtualImageCreation, format_arg,
     ASSERT(image == 0);
     ASSERT(clone == 0);
     ASSERT(graph == 0);
-}
+} /* testVirtualImageCreation() */
 
-typedef struct {
-    const char* name;
-    int width;
-    int height;
-    vx_df_image format;
-} dims_arg;
-
-TEST_WITH_ARG(Image, testVirtualImageCreationDims, dims_arg,
+TEST_WITH_ARG(Image, testVirtualImageCreationDims, ImageDims_Arg,
     ARG("0_0_REAL", 0, 0, VX_DF_IMAGE_U8),
     ARG("DISABLED_0_4_REAL", 0, 4, VX_DF_IMAGE_U8),
     ARG("DISABLED_4_0_REAL", 4, 0, VX_DF_IMAGE_U8),
@@ -131,7 +210,7 @@ TEST_WITH_ARG(Image, testVirtualImageCreationDims, dims_arg,
     ARG("DISABLED_0_4_VIRT", 0, 4, VX_DF_IMAGE_VIRT),
     ARG("DISABLED_4_0_VIRT", 4, 0, VX_DF_IMAGE_VIRT),
     ARG("4_4_VIRT", 4, 4, VX_DF_IMAGE_VIRT),
-    )
+)
 {
     vx_context context = context_->vx_context_;
     vx_image   image   = 0;
@@ -153,196 +232,11 @@ TEST_WITH_ARG(Image, testVirtualImageCreationDims, dims_arg,
     ASSERT(image == 0);
     ASSERT(clone == 0);
     ASSERT(graph == 0);
-}
+} /* testVirtualImageCreationDims() */
 
-
-TEST_WITH_ARG(Image, testConvert_CT_Image, format_arg,
-    ARG_ENUM(VX_DF_IMAGE_U8),
-    ARG_ENUM(VX_DF_IMAGE_U16),
-    ARG_ENUM(VX_DF_IMAGE_S16),
-    ARG_ENUM(VX_DF_IMAGE_U32),
-    ARG_ENUM(VX_DF_IMAGE_S32),
-    ARG_ENUM(VX_DF_IMAGE_RGB),
-    ARG_ENUM(VX_DF_IMAGE_RGBX),
-    ARG_ENUM(VX_DF_IMAGE_NV12),
-    ARG_ENUM(VX_DF_IMAGE_NV21),
-    ARG_ENUM(VX_DF_IMAGE_UYVY),
-    ARG_ENUM(VX_DF_IMAGE_YUYV),
-    ARG_ENUM(VX_DF_IMAGE_IYUV),
-    ARG_ENUM(VX_DF_IMAGE_YUV4),
+TEST_WITH_ARG(Image, testCreateImageFromHandle, ImageGenerator_Arg,
+    TEST_IMAGE_RANDOM_IMAGE_PARAMETERS
 )
-{
-    vx_context context = context_->vx_context_;
-    vx_image   image   = 0,
-               image2  = 0;
-    CT_Image   ctimg   = 0,
-               ctimg2  = 0;
-
-    image = vxCreateImage(context, 16, 16, arg_->format);
-    ASSERT_VX_OBJECT(image, VX_TYPE_IMAGE);
-
-    ASSERT_NO_FAILURE(ct_fill_image_random(image, &CT()->seed_));
-
-    ASSERT_NO_FAILURE(ctimg = ct_image_from_vx_image(image));
-
-    ASSERT_NO_FAILURE(image2 = ct_image_to_vx_image(ctimg, context));
-
-    ASSERT_NO_FAILURE(ctimg2 = ct_image_from_vx_image(image2));
-
-    ASSERT_EQ_CTIMAGE(ctimg, ctimg2);
-
-    VX_CALL(vxReleaseImage(&image));
-    VX_CALL(vxReleaseImage(&image2));
-
-    ASSERT(image == 0);
-    ASSERT(image2 == 0);
-}
-
-
-/* ***************************************************************************
-//  local auxiliary functions
-*/
-
-/*
-// Generate input random pixel values
-*/
-static CT_Image own_generate_rand_image(const char* fileName, int width, int height, vx_df_image format)
-{
-    CT_Image image;
-
-    ASSERT_NO_FAILURE_(return 0,
-        image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 256));
-
-    return image;
-} /* own_generate_rand_image() */
-
-
-static
-vx_uint32 own_plane_subsampling_x(vx_df_image format, vx_uint32 plane)
-{
-    int subsampling_x = 0;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        subsampling_x = (0 == plane) ? 1 : 2;
-        break;
-
-    default:
-        subsampling_x = 1;
-        break;
-    }
-
-    return subsampling_x;
-}
-
-static
-vx_uint32 own_plane_subsampling_y(vx_df_image format, vx_uint32 plane)
-{
-    int subsampling_y = 0;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        subsampling_y = (0 == plane) ? 1 : 2;
-        break;
-
-    default:
-        subsampling_y = 1;
-        break;
-    }
-
-    return subsampling_y;
-}
-
-static
-vx_uint32 own_elem_size(vx_df_image format, vx_uint32 plane)
-{
-    int channel_step_x = 0;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-        channel_step_x = 1;
-        break;
-
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-        channel_step_x = 2;
-        break;
-
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-    case VX_DF_IMAGE_RGBX:
-        channel_step_x = 4;
-        break;
-
-    case VX_DF_IMAGE_RGB:
-        channel_step_x = 3;
-        break;
-
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        channel_step_x = 2;
-        break;
-
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_YUV4:
-        channel_step_x = 1;
-        break;
-
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        channel_step_x = (0 == plane) ? 1 : 2;
-        break;
-
-    default:
-        channel_step_x = 0;
-    }
-
-    return channel_step_x;
-}
-
-typedef struct
-{
-    const char*      testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char*      fileName;
-    int              width;
-    int              height;
-    vx_df_image      format;
-
-} CreateImageFromHandle_Arg;
-
-
-#define VX_PLANE_MAX (4)
-
-#undef ADD_IMAGE_FORMAT
-#define ADD_IMAGE_FORMAT(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U8", __VA_ARGS__, VX_DF_IMAGE_U8)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U16", __VA_ARGS__, VX_DF_IMAGE_U16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S16", __VA_ARGS__, VX_DF_IMAGE_S16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U32", __VA_ARGS__, VX_DF_IMAGE_U32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S32", __VA_ARGS__, VX_DF_IMAGE_S32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGB", __VA_ARGS__, VX_DF_IMAGE_RGB)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGBX", __VA_ARGS__, VX_DF_IMAGE_RGBX)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_UYVY", __VA_ARGS__, VX_DF_IMAGE_UYVY)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUYV", __VA_ARGS__, VX_DF_IMAGE_YUYV)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV))
-
-#define CREATE_IMAGE_FROM_HANDLE_PARAMETERS \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(Image, testCreateImageFromHandle, CreateImageFromHandle_Arg, CREATE_IMAGE_FROM_HANDLE_PARAMETERS)
 {
     vx_uint32 n;
     vx_uint32 nplanes;
@@ -365,6 +259,7 @@ TEST_WITH_ARG(Image, testCreateImageFromHandle, CreateImageFromHandle_Arg, CREAT
 
     switch (arg_->format)
     {
+    case VX_DF_IMAGE_U1:
     case VX_DF_IMAGE_U8:
     case VX_DF_IMAGE_U16:
     case VX_DF_IMAGE_S16:
@@ -406,6 +301,8 @@ TEST_WITH_ARG(Image, testCreateImageFromHandle, CreateImageFromHandle_Arg, CREAT
         addr[n].dim_y    = src->height / ct_image_get_channel_subsampling_y(src, channel[n]);
         addr[n].stride_x = ct_image_get_channel_step_x(src, channel[n]);
         addr[n].stride_y = ct_image_get_channel_step_y(src, channel[n]);
+        if (arg_->format == VX_DF_IMAGE_U1)
+            addr[n].stride_x_bits = 1;
 
         ptrs[n] = ct_image_get_plane_base(src, n);
     }
@@ -421,323 +318,9 @@ TEST_WITH_ARG(Image, testCreateImageFromHandle, CreateImageFromHandle_Arg, CREAT
     ASSERT(image == 0);
 } /* testCreateImageFromHandle() */
 
-
-static uint32_t own_stride_bytes(vx_df_image format, int step)
-{
-    uint32_t factor = 0;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-    case VX_DF_IMAGE_NV21:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_YUV4:
-    case VX_DF_IMAGE_IYUV:
-        factor = 1;
-        break;
-
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        factor = 2;
-        break;
-
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-    case VX_DF_IMAGE_RGBX:
-        factor = 4;
-        break;
-
-    case VX_DF_IMAGE_RGB:
-        factor = 3;
-        break;
-
-    default:
-        ASSERT_(return 0, 0);
-    }
-
-    return step*factor;
-}
-
-
-static int own_get_channel_step_x(vx_df_image format, vx_enum channel)
-{
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-        return 1;
-
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-        return 2;
-
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-    case VX_DF_IMAGE_RGBX:
-        return 4;
-
-    case VX_DF_IMAGE_RGB:
-        return 3;
-
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        if (channel == VX_CHANNEL_Y)
-            return 2;
-        return 4;
-
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_YUV4:
-        return 1;
-
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        if (channel == VX_CHANNEL_Y)
-            return 1;
-        return 2;
-
-    default:
-        ASSERT_(return 0, 0);
-    }
-
-    return 0;
-}
-
-
-static int own_get_channel_step_y(vx_df_image format, vx_enum channel, int step)
-{
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-        return step;
-
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-        return step * 2;
-
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-    case VX_DF_IMAGE_RGBX:
-        return step * 4;
-
-    case VX_DF_IMAGE_RGB:
-        return step * 3;
-
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        return step * 2;
-
-    case VX_DF_IMAGE_IYUV:
-        return (channel == VX_CHANNEL_Y) ? step : step / 2;
-
-    case VX_DF_IMAGE_YUV4:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        return step;
-
-    default:
-        ASSERT_(return 0, 0);
-    }
-
-    return 0;
-}
-
-
-static int own_get_channel_subsampling_x(vx_df_image format, vx_enum channel)
-{
-    if (channel == VX_CHANNEL_Y)
-        return 1;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        return 2;
-    }
-
-    return 1;
-}
-
-
-int own_get_channel_subsampling_y(vx_df_image format, vx_enum channel)
-{
-    if (channel == VX_CHANNEL_Y)
-        return 1;
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_IYUV:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        return 2;
-
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_UYVY:
-        return 1;
-    }
-
-    return 1;
-}
-
-
-static unsigned int own_image_bits_per_pixel(vx_df_image format, unsigned int p)
-{
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-        return 8 * 1;
-
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-    case VX_DF_IMAGE_UYVY:
-    case VX_DF_IMAGE_YUYV:
-        return 8 * 2;
-
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-    case VX_DF_IMAGE_RGBX:
-        return 8 * 4;
-
-    case VX_DF_IMAGE_RGB:
-    case VX_DF_IMAGE_YUV4:
-        return 8 * 3;
-
-    case VX_DF_IMAGE_IYUV:
-        return 8 * 3 / 2;
-
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-        if (p == 0)
-            return 8 * 1;
-        else
-            return 8 * 2;
-
-    default:
-        CT_RecordFailure();
-        return 0;
-    };
-}
-
-static size_t own_plane_size(uint32_t width, uint32_t height, unsigned int p, vx_df_image format)
-{
-    return (size_t)(width * height * own_image_bits_per_pixel(format, p) / 8);
-}
-
-
-/*
-// Allocates image plane pointers from user controlled memory according to format, width, height params
-// and initialize with some value
-*/
-static void own_allocate_image_ptrs(
-    vx_df_image format, int width, int height,
-    vx_uint32* nplanes, void* ptrs[], vx_imagepatch_addressing_t addr[],
-    vx_pixel_value_t* val)
-{
-    unsigned int p;
-    int channel[VX_PLANE_MAX] = { 0, 0, 0, 0 };
-
-    switch (format)
-    {
-    case VX_DF_IMAGE_U8:
-    case VX_DF_IMAGE_U16:
-    case VX_DF_IMAGE_S16:
-    case VX_DF_IMAGE_U32:
-    case VX_DF_IMAGE_S32:
-        channel[0] = VX_CHANNEL_0;
-        break;
-
-    case VX_DF_IMAGE_RGB:
-    case VX_DF_IMAGE_RGBX:
-        channel[0] = VX_CHANNEL_R;
-        channel[1] = VX_CHANNEL_G;
-        channel[2] = VX_CHANNEL_B;
-        channel[3] = VX_CHANNEL_A;
-        break;
-
-    case VX_DF_IMAGE_UYVY:
-    case VX_DF_IMAGE_YUYV:
-    case VX_DF_IMAGE_NV12:
-    case VX_DF_IMAGE_NV21:
-    case VX_DF_IMAGE_YUV4:
-    case VX_DF_IMAGE_IYUV:
-        channel[0] = VX_CHANNEL_Y;
-        channel[1] = VX_CHANNEL_U;
-        channel[2] = VX_CHANNEL_V;
-        break;
-
-    default:
-        ASSERT(0);
-    }
-
-    ASSERT_NO_FAILURE(*nplanes = ct_get_num_planes(format));
-
-    for (p = 0; p < *nplanes; p++)
-    {
-        size_t plane_size = 0;
-
-        vx_uint32 subsampling_x = own_get_channel_subsampling_x(format, channel[p]);
-        vx_uint32 subsampling_y = own_get_channel_subsampling_y(format, channel[p]);
-
-        addr[p].dim_x    = width  / subsampling_x;
-        addr[p].dim_y    = height / subsampling_y;
-        addr[p].stride_x = own_get_channel_step_x(format, channel[p]);
-        addr[p].stride_y = own_get_channel_step_y(format, channel[p], width);
-
-        plane_size = addr[p].stride_y * addr[p].dim_y;
-
-        if (plane_size != 0)
-        {
-            ptrs[p] = ct_alloc_mem(plane_size);
-            /* init memory */
-            ct_memset(ptrs[p], val->reserved[p], plane_size);
-        }
-    }
-
-    return;
-}
-
-
-typedef struct
-{
-    const char*      testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char*      fileName;
-    int              width;
-    int              height;
-    vx_df_image      format;
-    vx_bool          have_roi;
-
-} SwapImageHandle_Arg;
-
-
-#define VX_PLANE_MAX (4)
-
-#define ADD_IMAGE_FORMAT(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U8", __VA_ARGS__, VX_DF_IMAGE_U8)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U16", __VA_ARGS__, VX_DF_IMAGE_U16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S16", __VA_ARGS__, VX_DF_IMAGE_S16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U32", __VA_ARGS__, VX_DF_IMAGE_U32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S32", __VA_ARGS__, VX_DF_IMAGE_S32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGB", __VA_ARGS__, VX_DF_IMAGE_RGB)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGBX", __VA_ARGS__, VX_DF_IMAGE_RGBX)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_UYVY", __VA_ARGS__, VX_DF_IMAGE_UYVY)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUYV", __VA_ARGS__, VX_DF_IMAGE_YUYV)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV))
-
-#define ADD_IMAGE_ROI(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/ROI=true", __VA_ARGS__, vx_true_e)), \
-    CT_EXPAND(nextmacro(testArgName "/ROI=false", __VA_ARGS__, vx_false_e))
-
-#define SWAP_IMAGE_HANDLE_PARAMETERS \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ADD_IMAGE_ROI, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE_PARAMETERS)
+TEST_WITH_ARG(Image, testSwapImageHandle, ImageGenerator_Arg,
+    TEST_IMAGE_RANDOM_IMAGE_WITH_ROI_PARAMETERS
+)
 {
     vx_uint32 n;
     vx_context context = context_->vx_context_;
@@ -805,10 +388,11 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
 
         vx_rectangle_t roi1_rect =
         {
-            arg_->width / 2,
-            arg_->height / 2,
-            arg_->width,
-            arg_->height
+            /* U1 subimages must start on byte boundary */
+            (vx_uint32)(arg_->format == VX_DF_IMAGE_U1 ? ((arg_->width / 2 + 7) / 8) * 8 : arg_->width / 2),
+            (vx_uint32)arg_->height / 2,
+            (vx_uint32)arg_->width,
+            (vx_uint32)arg_->height
         };
 
         vx_rectangle_t roi2_rect;
@@ -819,7 +403,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
         VX_CALL(vxQueryImage(roi1, VX_IMAGE_WIDTH, &roi1_width, sizeof(vx_uint32)));
         VX_CALL(vxQueryImage(roi1, VX_IMAGE_HEIGHT, &roi1_height, sizeof(vx_uint32)));
 
-        roi2_rect.start_x = roi1_width / 2;
+        roi2_rect.start_x = arg_->format == VX_DF_IMAGE_U1 ? ((roi1_width / 2 + 7) / 8 ) * 8 : roi1_width / 2;
         roi2_rect.start_y = roi1_height / 2;
         roi2_rect.end_x   = roi1_width;
         roi2_rect.end_y   = roi1_height;
@@ -827,7 +411,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
         /* second level subimage */
         ASSERT_VX_OBJECT(roi2 = vxCreateImageFromROI(roi1, &roi2_rect), VX_TYPE_IMAGE);
 
-        /* try to get back ROI pointers */        
+        /* try to get back ROI pointers */
         ASSERT_NE_VX_STATUS(VX_SUCCESS, vxSwapImageHandle(roi2, NULL, prev_ptrs, nplanes1));
 
         /* try to replace and get back ROI pointers */
@@ -852,7 +436,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
             {
                 for (j = 0; j < addr.dim_x; j += addr.step_x)
                 {
-                    unsigned char* p = vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
                     if (p[0] != val1.reserved[n])
                         CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val1, p[0]);
                 }
@@ -882,7 +466,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
             {
                 for (j = 0; j < addr.dim_x; j += addr.step_x)
                 {
-                    unsigned char* p = vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
                     if (p[0] != val2.reserved[n])
                         CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val2, p[0]);
                 }
@@ -909,7 +493,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
             {
                 for (j = 0; j < addr.dim_x; j += addr.step_x)
                 {
-                    unsigned char* p = vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
                     *p = val3.reserved[n];
                 }
             }
@@ -922,7 +506,7 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
         /* check that the reclaimed host memory contains the correct data */
         for (n = 0; n < nplanes2; n++)
         {
-            vx_uint8* plane_ptr = prev_ptrs[n];
+            vx_uint8* plane_ptr = (vx_uint8*)prev_ptrs[n];
             vx_uint32 i;
             vx_uint32 j;
             vx_uint32 subsampling_x = own_plane_subsampling_x(arg_->format, n);
@@ -936,7 +520,8 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
             {
                 for (j = 0; j < addr2[n].dim_x; j++)
                 {
-                    unsigned int k = i * addr2[n].stride_y + j * addr2[n].stride_x;
+                    unsigned int k = i * addr2[n].stride_y;
+                    k += (addr2[n].stride_x == 0) ? (j * addr2[n].stride_x_bits) / 8 : j * addr2[n].stride_x;
 
                     unsigned char p = plane_ptr[k];
 
@@ -1083,40 +668,9 @@ TEST_WITH_ARG(Image, testSwapImageHandle, SwapImageHandle_Arg, SWAP_IMAGE_HANDLE
     ASSERT(image2 == 0);
 } /* testSwapImageHandle() */
 
-
-typedef struct
-{
-    const char*      testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char*      fileName;
-    int              width;
-    int              height;
-    vx_df_image      format;
-
-} FormatImagePatchAddress1d_Arg;
-
-
-#define VX_PLANE_MAX (4)
-
-#define ADD_IMAGE_FORMAT(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U8", __VA_ARGS__, VX_DF_IMAGE_U8)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U16", __VA_ARGS__, VX_DF_IMAGE_U16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S16", __VA_ARGS__, VX_DF_IMAGE_S16)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_U32", __VA_ARGS__, VX_DF_IMAGE_U32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_S32", __VA_ARGS__, VX_DF_IMAGE_S32)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGB", __VA_ARGS__, VX_DF_IMAGE_RGB)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_RGBX", __VA_ARGS__, VX_DF_IMAGE_RGBX)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_UYVY", __VA_ARGS__, VX_DF_IMAGE_UYVY)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUYV", __VA_ARGS__, VX_DF_IMAGE_YUYV)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV))
-
-#define FORMAT_IMAGE_PATCH_ADDRESS_1D_PARAMETERS \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(Image, testFormatImagePatchAddress1d, FormatImagePatchAddress1d_Arg, FORMAT_IMAGE_PATCH_ADDRESS_1D_PARAMETERS)
+TEST_WITH_ARG(Image, testFormatImagePatchAddress1d, ImageGenerator_Arg,
+    TEST_IMAGE_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_uint8* p1;
     vx_uint8* p2;
@@ -1175,10 +729,16 @@ TEST_WITH_ARG(Image, testFormatImagePatchAddress1d, FormatImagePatchAddress1d_Ar
         /* use linear addressing function */
         for (i = 0; i < addr1[n].dim_x*addr1[n].dim_y; i += addr1[n].step_x)
         {
-            p1 = vxFormatImagePatchAddress1d(ptrs1[n], i, &addr1[n]);
-            p2 = vxFormatImagePatchAddress1d(ptrs2[n], i, &addr2[n]);
+            p1 = (vx_uint8*)vxFormatImagePatchAddress1d(ptrs1[n], i, &addr1[n]);
+            p2 = (vx_uint8*)vxFormatImagePatchAddress1d(ptrs2[n], i, &addr2[n]);
             for (j = 0; j < addr1[n].stride_x; j++)
                 p2[j] = p1[j];
+            if (addr1[n].stride_x == 0 && addr1[n].stride_x_bits == 1)  // VX_DF_IMAGE_U1 image
+            {
+                vx_uint8 x = i % addr1[n].dim_x;
+                p2[0] = (p2[0] & ~(1 << (x % 8))) |
+                        (p1[0] &  (1 << (x % 8)));
+            }
         }
 
         VX_CALL(vxUnmapImagePatch(image1, map_id1));
@@ -1196,20 +756,40 @@ TEST_WITH_ARG(Image, testFormatImagePatchAddress1d, FormatImagePatchAddress1d_Ar
     ASSERT(image2 == 0);
 } /* testFormatImagePatchAddress1d() */
 
-TEST_WITH_ARG(Image, testvxSetImagePixelValues, format_arg,
-    ARG_ENUM(VX_DF_IMAGE_U8),
-    ARG_ENUM(VX_DF_IMAGE_U16),
-    ARG_ENUM(VX_DF_IMAGE_S16),
-    ARG_ENUM(VX_DF_IMAGE_U32),
-    ARG_ENUM(VX_DF_IMAGE_S32),
-    ARG_ENUM(VX_DF_IMAGE_RGB),
-    ARG_ENUM(VX_DF_IMAGE_RGBX),
-    ARG_ENUM(VX_DF_IMAGE_NV12),
-    ARG_ENUM(VX_DF_IMAGE_NV21),
-    ARG_ENUM(VX_DF_IMAGE_UYVY),
-    ARG_ENUM(VX_DF_IMAGE_YUYV),
-    ARG_ENUM(VX_DF_IMAGE_IYUV),
-    ARG_ENUM(VX_DF_IMAGE_YUV4),
+TEST_WITH_ARG(Image, testConvert_CT_Image, ImageFormat_Arg,
+    IMAGE_FORMAT_PARAMETERS_BASELINE,
+    ARG("_U1_/VX_DF_IMAGE_U1", VX_DF_IMAGE_U1),
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image   image   = 0,
+               image2  = 0;
+    CT_Image   ctimg   = 0,
+               ctimg2  = 0;
+
+    image = vxCreateImage(context, 16, 16, arg_->format);
+    ASSERT_VX_OBJECT(image, VX_TYPE_IMAGE);
+
+    ASSERT_NO_FAILURE(ct_fill_image_random(image, &CT()->seed_));
+
+    ASSERT_NO_FAILURE(ctimg = ct_image_from_vx_image(image));
+
+    ASSERT_NO_FAILURE(image2 = ct_image_to_vx_image(ctimg, context));
+
+    ASSERT_NO_FAILURE(ctimg2 = ct_image_from_vx_image(image2));
+
+    ASSERT_EQ_CTIMAGE(ctimg, ctimg2);
+
+    VX_CALL(vxReleaseImage(&image));
+    VX_CALL(vxReleaseImage(&image2));
+
+    ASSERT(image == 0);
+    ASSERT(image2 == 0);
+} /* testConvert_CT_Image() */
+
+TEST_WITH_ARG(Image, testvxSetImagePixelValues, ImageFormat_Arg,
+    IMAGE_FORMAT_PARAMETERS_BASELINE,
+    ARG("_U1_/VX_DF_IMAGE_U1", VX_DF_IMAGE_U1),
 )
 {
     vx_context  context = context_->vx_context_;
@@ -1228,16 +808,19 @@ TEST_WITH_ARG(Image, testvxSetImagePixelValues, format_arg,
     vals.reserved[1] = 0x22;
     vals.reserved[2] = 0x33;
     vals.reserved[3] = 0x44;
-	
+
     vx_status status = vxSetImagePixelValues(image, &vals);
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
 
     ASSERT_NO_FAILURE(ctimg = ct_image_from_vx_image(image));
 
     ASSERT_NO_FAILURE(refimg = ct_allocate_image(640, 480, arg_->format));
-	
+
     switch (arg_->format)
     {
+        case VX_DF_IMAGE_U1:
+            ct_memset(refimg->data.y, (vals.U1 ? 0xFF : 0x00), ((640 + 7) / 8) * 480);    // Set 8 pixels at a time
+            break;
         case VX_DF_IMAGE_U8:
             ct_memset(refimg->data.y, vals.U8, 640*480);
             break;
@@ -1324,22 +907,11 @@ TEST_WITH_ARG(Image, testvxSetImagePixelValues, format_arg,
 
     VX_CALL(vxReleaseImage(&image));
     ASSERT(image == 0);
-}
+} /* testvxSetImagePixelValues() */
 
-TEST_WITH_ARG(Image, testUniformImage, format_arg,
-    ARG_ENUM(VX_DF_IMAGE_U8),
-    ARG_ENUM(VX_DF_IMAGE_U16),
-    ARG_ENUM(VX_DF_IMAGE_S16),
-    ARG_ENUM(VX_DF_IMAGE_U32),
-    ARG_ENUM(VX_DF_IMAGE_S32),
-    ARG_ENUM(VX_DF_IMAGE_RGB),
-    ARG_ENUM(VX_DF_IMAGE_RGBX),
-    ARG_ENUM(VX_DF_IMAGE_NV12),
-    ARG_ENUM(VX_DF_IMAGE_NV21),
-    ARG_ENUM(VX_DF_IMAGE_UYVY),
-    ARG_ENUM(VX_DF_IMAGE_YUYV),
-    ARG_ENUM(VX_DF_IMAGE_IYUV),
-    ARG_ENUM(VX_DF_IMAGE_YUV4),
+TEST_WITH_ARG(Image, testUniformImage, ImageFormat_Arg,
+    IMAGE_FORMAT_PARAMETERS_BASELINE,
+    ARG("_U1_/VX_DF_IMAGE_U1", VX_DF_IMAGE_U1),
 )
 {
     vx_context context = context_->vx_context_;
@@ -1362,6 +934,9 @@ TEST_WITH_ARG(Image, testUniformImage, format_arg,
 
     switch (arg_->format)
     {
+        case VX_DF_IMAGE_U1:
+            ct_memset(refimg->data.y, (vals.U1 ? 0xFF : 0x00), ((640 + 7) / 8) * 480);    // Set 8 pixels at a time
+            break;
         case VX_DF_IMAGE_U8:
             ct_memset(refimg->data.y, vals.U8, 640*480);
             break;
@@ -1450,58 +1025,6 @@ TEST_WITH_ARG(Image, testUniformImage, format_arg,
     ASSERT(image == 0);
 } /* testUniformImage() */
 
-static void mem_free(void**ptr)
-{
-    ct_free_mem(*ptr);
-    *ptr = 0;
-}
-
-TEST(Image, testComputeImagePatchSize)
-{
-    vx_context context = context_->vx_context_;
-    vx_image   image   = 0;
-    vx_pixel_value_t val = {{ 0xAB }};
-    vx_size memsz;
-    vx_size count_pixels = 0;
-    vx_uint32 i;
-    vx_uint32 j;
-    vx_uint8* buffer;
-    vx_uint8* buffer0;
-    vx_rectangle_t rect             = { 0, 0, 640, 480 };
-    vx_imagepatch_addressing_t addr = { 640, 480, 1, 640 };
-
-    ASSERT_VX_OBJECT(image = vxCreateUniformImage(context, 640, 480, VX_DF_IMAGE_U8, &val), VX_TYPE_IMAGE);
-
-    memsz = vxComputeImagePatchSize(image, &rect, 0);
-    ASSERT(memsz >= 640*480);
-
-    ASSERT(buffer = ct_alloc_mem(memsz));
-    CT_RegisterForGarbageCollection(buffer, mem_free, CT_GC_OBJECT);
-    buffer0 = buffer;
-
-    // copy image data to our buffer
-    VX_CALL(vxCopyImagePatch(image, &rect, 0, &addr, buffer, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ASSERT_EQ_PTR(buffer0, buffer);
-
-    for (i = 0; i < 480; ++i)
-    {
-        for (j = 0; j < 640; ++j)
-        {
-            vx_uint8* ptr = buffer + i * addr.stride_y + j;
-
-            // no out-of-bound access
-            ASSERT(ptr >= buffer && (vx_size)(ptr - buffer) < memsz);
-
-            count_pixels += (*ptr == val.U8);
-        }
-    }
-
-    ASSERT_EQ_INT(640*480, count_pixels);
-
-    VX_CALL(vxReleaseImage(&image));
-    ASSERT(image == 0);
-} /* testComputeImagePatchSize() */
-
 #define IMAGE_SIZE_X 320
 #define IMAGE_SIZE_Y 200
 #define PATCH_SIZE_X 33
@@ -1512,8 +1035,8 @@ TEST(Image, testComputeImagePatchSize)
 TEST(Image, testAccessCopyWrite)
 {
     vx_context context = context_->vx_context_;
-    vx_uint8 *localPatchDense = ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*sizeof(vx_uint8));
-    vx_uint8 *localPatchSparse = ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*3*3*sizeof(vx_uint8));
+    vx_uint8 *localPatchDense  = (vx_uint8*)ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*sizeof(vx_uint8));
+    vx_uint8 *localPatchSparse = (vx_uint8*)ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*3*3*sizeof(vx_uint8));
     vx_image image;
     int x, y;
     vx_map_id map_id;
@@ -1626,8 +1149,8 @@ TEST(Image, testAccessCopyWrite)
 TEST(Image, testAccessCopyRead)
 {
     vx_context context = context_->vx_context_;
-    vx_uint8 *localPatchDense = ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*sizeof(vx_uint8));
-    vx_uint8 *localPatchSparse = ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*3*3*sizeof(vx_uint8));
+    vx_uint8 *localPatchDense  = (vx_uint8*)ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*sizeof(vx_uint8));
+    vx_uint8 *localPatchSparse = (vx_uint8*)ct_alloc_mem(PATCH_SIZE_X*PATCH_SIZE_Y*3*3*sizeof(vx_uint8));
     vx_image image;
     int x, y;
     vx_map_id map_id;
@@ -1723,49 +1246,60 @@ TEST(Image, testAccessCopyRead)
 TEST(Image, testAccessCopyWriteUniformImage)
 {
     vx_context context = context_->vx_context_;
-    vx_image   image   = 0;
+    vx_image image = 0;
+    vx_image roi_image = 0;
     vx_uint32 width = 320;
     vx_uint32 height = 240;
+    vx_uint32 roi_width = 128;
+    vx_uint32 roi_height = 128;
     vx_map_id map_id;
 
     vx_pixel_value_t vals = {{0xFF}};
-    ASSERT_VX_OBJECT(image = vxCreateUniformImage(context, width, height, VX_DF_IMAGE_U8, &vals), VX_TYPE_IMAGE);
-    vx_rectangle_t rect = {0, 0, 320, 240};
-    vx_imagepatch_addressing_t addr;
+    vx_rectangle_t rect = {0, 0, width, height};
+    vx_rectangle_t roi_rect = {0, 0, roi_width, roi_height};
+    vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
+    vx_imagepatch_addressing_t roi_addr = VX_IMAGEPATCH_ADDR_INIT;
+    roi_addr.dim_x = roi_width;
+    roi_addr.dim_y = roi_height;
+    roi_addr.stride_x = 1;
+    roi_addr.stride_y = roi_width;
+
     vx_uint8 *internal_data = NULL;
-    //can get read-access
+    vx_uint8 *external_data = (vx_uint8 *)ct_alloc_mem(roi_width * roi_height * sizeof(vx_uint8));
+
+    ASSERT_VX_OBJECT(image = vxCreateUniformImage(context, width, height, VX_DF_IMAGE_U8, &vals), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(roi_image = vxCreateImageFromROI(image, &roi_rect), VX_TYPE_IMAGE);
+
+    // Can get read-access, cannot get write-access
     vx_status status = vxMapImagePatch(image, &rect, 0, &map_id, &addr, (void **)&internal_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X);
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
     status = vxUnmapImagePatch(image, map_id);
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
-    //can not get write-access
-    vx_uint32 roi_width = 128;
-    vx_uint32 roi_height = 128;
-    vx_rectangle_t roi_rect = {0, 0, roi_width, roi_height};
-    vx_uint8 *external_data = (vx_uint8 *)ct_alloc_mem(roi_width * roi_height * sizeof(vx_uint8));
-
-    //Write is not be allowed for uniformimage
-    status = vxCopyImagePatch(image, &roi_rect, 0, &addr, (void *)external_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
-    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
-
-    //ok to read
-    status = vxCopyImagePatch(image, &roi_rect, 0, &addr, (void *)external_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
-    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
-
-    //test ROI image(from uniform image), behaviour must be equal to uniform image
-    vx_image roi_image = 0;
     internal_data = NULL;
+    status = vxMapImagePatch(image, &rect, 0, &map_id, &addr, (void **)&internal_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
 
-    ASSERT_VX_OBJECT(roi_image = vxCreateImageFromROI(image, &roi_rect), VX_TYPE_IMAGE);
+    // Reading from the image is allowed, writing to the image is not allowed
+    status = vxCopyImagePatch(image, &roi_rect, 0, &roi_addr, (void *)external_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    status = vxCopyImagePatch(image, &roi_rect, 0, &roi_addr, (void *)external_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    // Test ROI image(from uniform image), behaviour must be equal to uniform image
+    // Can get read-access, cannot get write-access
+    internal_data = NULL;
     status = vxMapImagePatch(roi_image, &roi_rect, 0, &map_id, &addr, (void **)&internal_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X);
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
     status = vxUnmapImagePatch(roi_image, map_id);
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
-
-    status = vxCopyImagePatch(roi_image, &roi_rect, 0, &addr, (void *)external_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+    internal_data = NULL;
+    status = vxMapImagePatch(roi_image, &roi_rect, 0, &map_id, &addr, (void **)&internal_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X);
     ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
 
-    status = vxCopyImagePatch(roi_image, &roi_rect, 0, &addr, (void *)external_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    // Reading from the image is allowed, writing to the image is not allowed
+    status = vxCopyImagePatch(roi_image, &roi_rect, 0, &roi_addr, (void *)external_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    status = vxCopyImagePatch(roi_image, &roi_rect, 0, &roi_addr, (void *)external_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
     ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
 
     EXPECT_EQ_VX_STATUS(VX_SUCCESS, vxReleaseImage(&image));
@@ -1823,6 +1357,419 @@ TEST(Image, testQueryImage)
 } /* testQueryImage() */
 
 
+/* ***************************************************************************
+//  local auxiliary functions
+*/
+
+/*
+// Generate input random pixel values
+*/
+static CT_Image own_generate_rand_image(const char* fileName, int width, int height, vx_df_image format)
+{
+    CT_Image image;
+
+    if (format == VX_DF_IMAGE_U1)
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 2));
+    else
+        ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 256));
+
+    return image;
+} /* own_generate_rand_image() */
+
+static vx_uint32 own_plane_subsampling_x(vx_df_image format, vx_uint32 plane)
+{
+    int subsampling_x = 0;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        subsampling_x = (0 == plane) ? 1 : 2;
+        break;
+
+    default:
+        subsampling_x = 1;
+        break;
+    }
+
+    return subsampling_x;
+} /* own_plane_subsampling_x() */
+
+static vx_uint32 own_plane_subsampling_y(vx_df_image format, vx_uint32 plane)
+{
+    int subsampling_y = 0;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        subsampling_y = (0 == plane) ? 1 : 2;
+        break;
+
+    default:
+        subsampling_y = 1;
+        break;
+    }
+
+    return subsampling_y;
+} /* own_plane_subsampling_y() */
+
+static vx_uint32 own_elem_size(vx_df_image format, vx_uint32 plane)
+{
+    int channel_step_x = 0;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+        channel_step_x = 0;
+        break;
+
+    case VX_DF_IMAGE_U8:
+        channel_step_x = 1;
+        break;
+
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+        channel_step_x = 2;
+        break;
+
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+    case VX_DF_IMAGE_RGBX:
+        channel_step_x = 4;
+        break;
+
+    case VX_DF_IMAGE_RGB:
+        channel_step_x = 3;
+        break;
+
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        channel_step_x = 2;
+        break;
+
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_YUV4:
+        channel_step_x = 1;
+        break;
+
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        channel_step_x = (0 == plane) ? 1 : 2;
+        break;
+
+    default:
+        channel_step_x = 0;
+    }
+
+    return channel_step_x;
+} /* own_elem_size() */
+
+static uint32_t own_stride_bytes(vx_df_image format, int step)
+{
+    uint32_t factor = 0;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+        return (step + 7) / 8;
+
+    case VX_DF_IMAGE_U8:
+    case VX_DF_IMAGE_NV21:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_YUV4:
+    case VX_DF_IMAGE_IYUV:
+        factor = 1;
+        break;
+
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        factor = 2;
+        break;
+
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+    case VX_DF_IMAGE_RGBX:
+        factor = 4;
+        break;
+
+    case VX_DF_IMAGE_RGB:
+        factor = 3;
+        break;
+
+    default:
+        ASSERT_(return 0, 0);
+    }
+
+    return step*factor;
+} /* own_stride_bytes() */
+
+static int own_get_channel_step_x(vx_df_image format, vx_enum channel)
+{
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+        return 0;
+
+    case VX_DF_IMAGE_U8:
+        return 1;
+
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+        return 2;
+
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+    case VX_DF_IMAGE_RGBX:
+        return 4;
+
+    case VX_DF_IMAGE_RGB:
+        return 3;
+
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        if (channel == VX_CHANNEL_Y)
+            return 2;
+        return 4;
+
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_YUV4:
+        return 1;
+
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        if (channel == VX_CHANNEL_Y)
+            return 1;
+        return 2;
+
+    default:
+        ASSERT_(return 0, 0);
+    }
+
+    return 0;
+} /* own_get_channel_step_x() */
+
+static int own_get_channel_step_y(vx_df_image format, vx_enum channel, int step)
+{
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+        return (step + 7) / 8;
+
+    case VX_DF_IMAGE_U8:
+        return step;
+
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+        return step * 2;
+
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+    case VX_DF_IMAGE_RGBX:
+        return step * 4;
+
+    case VX_DF_IMAGE_RGB:
+        return step * 3;
+
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        return step * 2;
+
+    case VX_DF_IMAGE_IYUV:
+        return (channel == VX_CHANNEL_Y) ? step : step / 2;
+
+    case VX_DF_IMAGE_YUV4:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        return step;
+
+    default:
+        ASSERT_(return 0, 0);
+    }
+
+    return 0;
+} /* own_get_channel_step_y() */
+
+static int own_get_channel_subsampling_x(vx_df_image format, vx_enum channel)
+{
+    if (channel == VX_CHANNEL_Y)
+        return 1;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        return 2;
+    }
+
+    return 1;
+} /* own_get_channel_subsampling_x() */
+
+int own_get_channel_subsampling_y(vx_df_image format, vx_enum channel)
+{
+    if (channel == VX_CHANNEL_Y)
+        return 1;
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_IYUV:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        return 2;
+
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_UYVY:
+        return 1;
+    }
+
+    return 1;
+} /* own_get_channel_subsampling_y() */
+
+static unsigned int own_image_bits_per_pixel(vx_df_image format, unsigned int p)
+{
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+        return 1 * 1;
+
+    case VX_DF_IMAGE_U8:
+        return 8 * 1;
+
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+    case VX_DF_IMAGE_UYVY:
+    case VX_DF_IMAGE_YUYV:
+        return 8 * 2;
+
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+    case VX_DF_IMAGE_RGBX:
+        return 8 * 4;
+
+    case VX_DF_IMAGE_RGB:
+    case VX_DF_IMAGE_YUV4:
+        return 8 * 3;
+
+    case VX_DF_IMAGE_IYUV:
+        return 8 * 3 / 2;
+
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+        if (p == 0)
+            return 8 * 1;
+        else
+            return 8 * 2;
+
+    default:
+        CT_RecordFailure();
+        return 0;
+    };
+} /* own_image_bits_per_pixel() */
+
+static size_t own_plane_size(uint32_t width, uint32_t height, unsigned int p, vx_df_image format)
+{
+    if (format == VX_DF_IMAGE_U1)
+    {
+        /* round rows up to full bytes */
+        size_t rowSize = (size_t)(width * own_image_bits_per_pixel(format, p) + 7) / 8;
+        return (size_t)(rowSize * height);
+    }
+    else
+    {
+        return (size_t)(width * height * own_image_bits_per_pixel(format, p) / 8);
+    }
+} /* own_plane_size() */
+
+/*
+// Allocates image plane pointers from user controlled memory according to format, width, height params
+// and initialize with some value
+*/
+static void own_allocate_image_ptrs(
+    vx_df_image format, int width, int height,
+    vx_uint32* nplanes, void* ptrs[], vx_imagepatch_addressing_t addr[],
+    vx_pixel_value_t* val)
+{
+    unsigned int p;
+    int channel[VX_PLANE_MAX] = { 0, 0, 0, 0 };
+
+    switch (format)
+    {
+    case VX_DF_IMAGE_U1:
+    case VX_DF_IMAGE_U8:
+    case VX_DF_IMAGE_U16:
+    case VX_DF_IMAGE_S16:
+    case VX_DF_IMAGE_U32:
+    case VX_DF_IMAGE_S32:
+        channel[0] = VX_CHANNEL_0;
+        break;
+
+    case VX_DF_IMAGE_RGB:
+    case VX_DF_IMAGE_RGBX:
+        channel[0] = VX_CHANNEL_R;
+        channel[1] = VX_CHANNEL_G;
+        channel[2] = VX_CHANNEL_B;
+        channel[3] = VX_CHANNEL_A;
+        break;
+
+    case VX_DF_IMAGE_UYVY:
+    case VX_DF_IMAGE_YUYV:
+    case VX_DF_IMAGE_NV12:
+    case VX_DF_IMAGE_NV21:
+    case VX_DF_IMAGE_YUV4:
+    case VX_DF_IMAGE_IYUV:
+        channel[0] = VX_CHANNEL_Y;
+        channel[1] = VX_CHANNEL_U;
+        channel[2] = VX_CHANNEL_V;
+        break;
+
+    default:
+        ASSERT(0);
+    }
+
+    ASSERT_NO_FAILURE(*nplanes = ct_get_num_planes(format));
+
+    for (p = 0; p < *nplanes; p++)
+    {
+        size_t plane_size = 0;
+
+        vx_uint32 subsampling_x = own_get_channel_subsampling_x(format, channel[p]);
+        vx_uint32 subsampling_y = own_get_channel_subsampling_y(format, channel[p]);
+
+        addr[p].dim_x    = width  / subsampling_x;
+        addr[p].dim_y    = height / subsampling_y;
+        addr[p].stride_x = own_get_channel_step_x(format, channel[p]);
+        addr[p].stride_y = own_get_channel_step_y(format, channel[p], width);
+        if (format == VX_DF_IMAGE_U1)
+            addr[p].stride_x_bits = 1;
+
+        plane_size = addr[p].stride_y * addr[p].dim_y;
+
+        if (plane_size != 0)
+        {
+            ptrs[p] = ct_alloc_mem(plane_size);
+            /* init memory */
+            ct_memset(ptrs[p], val->reserved[p], plane_size);
+        }
+    }
+
+    return;
+} /* own_allocate_image_ptrs() */
+
+static void mem_free(void**ptr)
+{
+    ct_free_mem(*ptr);
+    *ptr = 0;
+} /* mem_free() */
+
 /*
 // Check image patch data in user memory against constant pixel value
 // Note:
@@ -1839,6 +1786,15 @@ void own_check_image_patch_uniform(vx_pixel_value_t* ref_val, void* ptr, vx_imag
         {
             switch (format)
             {
+            case VX_DF_IMAGE_U1:
+            {
+                vx_uint8 offset = x % 8;
+                vx_uint8* tst = (vx_uint8*)((vx_uint8*)ptr + y * addr->stride_y + (x * addr->stride_x_bits) / 8);
+                vx_uint8  ref = ref_val->U1 ? 1 : 0;
+                ASSERT_EQ_INT(ref, (tst[0] & (1 << offset)) >> offset );
+            }
+            break;
+
             case VX_DF_IMAGE_U8:
             {
                 vx_uint8* tst = (vx_uint8*)((vx_uint8*)ptr + y * addr->stride_y + x * addr->stride_x);
@@ -1981,6 +1937,18 @@ void own_image_patch_from_ct_image(CT_Image ref, vx_imagepatch_addressing_t* ref
 {
     switch (format)
     {
+    case VX_DF_IMAGE_U1:
+    {
+        ref_addr[0].dim_x   = ref->width + ref->roi.x % 8;
+        ref_addr[0].dim_y   = ref->height;
+        ref_addr[0].stride_x = 0;
+        ref_addr[0].stride_y = (ref->stride + 7) / 8;
+        ref_addr[0].stride_x_bits = 1;
+
+        ref_ptrs[0] = ref->data.y;
+    }
+    break;
+
     case VX_DF_IMAGE_U8:
     {
         ref_addr[0].dim_x   = ref->width;
@@ -2165,12 +2133,25 @@ void own_check_image_patch_plane_user_layout(CT_Image ref, vx_imagepatch_address
     vx_uint32 y;
     vx_uint32 elem_size = own_elem_size(format, plane);
 
+    uint32_t xROIOffset = (format == VX_DF_IMAGE_U1) ? ref->roi.x % 8 : 0;     // Offset needed for U1 ROI
     for (y = 0; y < tst_addr->dim_y; y++)
     {
-        for (x = 0; x < tst_addr->dim_x; x++)
+        for (x = xROIOffset; x < tst_addr->dim_x + xROIOffset; x++)
         {
             switch (format)
             {
+            case VX_DF_IMAGE_U1:
+            {
+                vx_uint8  offset  = x % 8;
+                vx_uint8* tst_ptr = (vx_uint8*)((vx_uint8*)ptr + y * tst_addr->stride_y +
+                                                (x * tst_addr->stride_x_bits) / 8);
+                vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ct_stride_bytes(ref) +
+                                                (x * ct_image_bits_per_pixel(VX_DF_IMAGE_U1)) / 8);
+                ASSERT_EQ_INT((ref_ptr[0] & (1 << offset)) >> offset,
+                              (tst_ptr[0] & (1 << offset)) >> offset);
+            }
+            break;
+
             case VX_DF_IMAGE_U8:
             {
                 vx_uint8* tst_ptr = (vx_uint8*)((vx_uint8*)ptr + y * tst_addr->stride_y + x * tst_addr->stride_x);
@@ -2309,6 +2290,17 @@ void own_check_image_patch_plane_vx_layout(CT_Image ctimg, vx_imagepatch_address
         {
             switch (format)
             {
+            case VX_DF_IMAGE_U1:
+            {
+                vx_uint8  offset  = x % 8;
+                vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * ct_stride_bytes(ctimg) +
+                                                (x * ct_image_bits_per_pixel(VX_DF_IMAGE_U1)) / 8);
+                vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(p_vx_base, x, y, vx_addr);
+                ASSERT_EQ_INT((ref_ptr[0] & (1 << offset)) >> offset,
+                              (tst_ptr[0] & (1 << offset)) >> offset);
+            }
+            break;
+
             case VX_DF_IMAGE_U8:
             {
                 vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * ctimg->stride * ct_elem_size + x * ct_elem_size);
@@ -2436,6 +2428,319 @@ void own_check_image_patch_plane_vx_layout(CT_Image ctimg, vx_imagepatch_address
 
 
 /* ***************************************************************************
+//  vxCreateImageFromChannel tests
+*/
+TESTCASE(vxCreateImageFromChannel, CT_VXContext, ct_setup_vx_context, 0)
+
+typedef struct
+{
+    const char* testName;
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
+    const char* fileName;
+    int width;
+    int height;
+    vx_df_image format;
+    vx_enum channel;
+} CreateImageFromChannel_Arg;
+
+#define ADD_IMAGE_FORMAT_444(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4))
+
+#define ADD_IMAGE_FORMAT_420(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21))
+
+#define ADD_IMAGE_CHANNEL_YUV(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_Y", __VA_ARGS__, VX_CHANNEL_Y)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_U", __VA_ARGS__, VX_CHANNEL_U)), \
+    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_V", __VA_ARGS__, VX_CHANNEL_V))
+
+#define ADD_IMAGE_CHANNEL_Y(testArgName, nextmacro, ...) \
+    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_Y", __VA_ARGS__, VX_CHANNEL_Y))
+
+#define CREATE_IMAGE_FROM_CHANNEL_UNIFORM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_444, ADD_IMAGE_CHANNEL_YUV, ARG, NULL, NULL), \
+    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_420, ADD_IMAGE_CHANNEL_Y,   ARG, NULL, NULL)
+
+#define CREATE_IMAGE_FROM_CHANNEL_RANDOM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_444, ADD_IMAGE_CHANNEL_YUV, ARG, own_generate_rand_image, NULL), \
+    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_420, ADD_IMAGE_CHANNEL_Y,   ARG, own_generate_rand_image, NULL)
+
+TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromUniformImage, CreateImageFromChannel_Arg,
+    CREATE_IMAGE_FROM_CHANNEL_UNIFORM_IMAGE_PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src = 0;
+    vx_image ref = 0;
+    vx_image tst = 0;
+    vx_uint32 width  = arg_->width;
+    vx_uint32 height = arg_->height;
+    vx_pixel_value_t pixel_value;
+
+    pixel_value.YUV[0] = 0x55;
+    pixel_value.YUV[1] = 0xAA;
+    pixel_value.YUV[2] = 0x33;
+
+    EXPECT_VX_OBJECT(src = vxCreateUniformImage(context, arg_->width, arg_->height, arg_->format, &pixel_value), VX_TYPE_IMAGE);
+
+    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
+    {
+        width  /= 2;
+        height /= 2;
+    }
+
+    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
+
+    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
+
+    {
+        CT_Image image_ref = ct_image_from_vx_image(ref);
+        CT_Image image_tst = ct_image_from_vx_image(tst);
+
+        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
+    }
+
+    VX_CALL(vxReleaseImage(&ref));
+    VX_CALL(vxReleaseImage(&tst));
+    VX_CALL(vxReleaseImage(&src));
+} /* testChannelFromUniformImage() */
+
+TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromRandomImage, CreateImageFromChannel_Arg,
+    CREATE_IMAGE_FROM_CHANNEL_RANDOM_IMAGE_PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src = 0;
+    vx_image ref = 0;
+    vx_image tst = 0;
+    vx_uint32 width  = arg_->width;
+    vx_uint32 height = arg_->height;
+    CT_Image image = NULL;
+
+    ASSERT_NO_FAILURE(image = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+
+    EXPECT_VX_OBJECT(src = ct_image_to_vx_image(image, context), VX_TYPE_IMAGE);
+
+    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
+    {
+        width  /= 2;
+        height /= 2;
+    }
+
+    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
+
+    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
+
+    {
+        /* 1. check if image created from channel is equal to channel extracted from image */
+        CT_Image image_ref = ct_image_from_vx_image(ref);
+        CT_Image image_tst = ct_image_from_vx_image(tst);
+
+        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
+    }
+
+    {
+        /* 2. check if modification of image created from channel reflected into channel of original image */
+        vx_uint32 i;
+        vx_uint32 j;
+        vx_uint32 p = (VX_CHANNEL_Y == arg_->channel ? 0 : (VX_CHANNEL_U == arg_->channel ? 1 : 2));
+        vx_rectangle_t rect = { 1, 1, 6, 6 };
+        vx_imagepatch_addressing_t addr =
+        {
+            rect.end_x - rect.start_x,
+            rect.end_y - rect.start_y,
+            1,
+            rect.end_x - rect.start_x
+        };
+
+        vx_size sz = 0;
+        void* ptr = 0;
+        vx_map_id tst_map_id;
+        vx_imagepatch_addressing_t map_addr;
+        void *tst_base = NULL;
+        vx_size numPixels;
+
+        VX_CALL(vxMapImagePatch(tst, &rect, 0, &tst_map_id, &map_addr, &tst_base, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+        numPixels = ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) *
+                     ((rect.end_y-rect.start_y) * VX_SCALE_UNITY/map_addr.scale_y);
+        sz = numPixels * map_addr.stride_x;
+        VX_CALL(vxUnmapImagePatch(tst, tst_map_id));
+
+        ptr = ct_alloc_mem(sz);
+
+        /* fill image patch with some values */
+        for (i = 0; i < addr.dim_y; i++)
+        {
+            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
+            for (j = 0; j < addr.dim_x; j++)
+            {
+                p[j] = (vx_uint8)(i + j);
+            }
+        }
+
+        /* copy patch to channel image */
+        vxCopyImagePatch(tst, &rect, 0, &addr, ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+
+        /* clean patch memory */
+        ct_memset(ptr, 0, sz);
+
+        /* get channel patch from original image */
+        vxCopyImagePatch(src, &rect, p, &addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+
+        /* check channel changes has been reflected into original image */
+        for (i = 0; i < addr.dim_y; i++)
+        {
+            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
+            for (j = 0; j < addr.dim_x; j++)
+            {
+                EXPECT_EQ_INT((vx_uint8)(i + j), p[j]);
+            }
+        }
+
+        ct_free_mem(ptr);
+    }
+
+    {
+        /* 3. check if modification of channel in original image reflected into image created from channel */
+        vx_uint32 i;
+        vx_uint32 j;
+        vx_uint32 p = (VX_CHANNEL_Y == arg_->channel ? 0 : (VX_CHANNEL_U == arg_->channel ? 1 : 2));
+        vx_rectangle_t rect = { 1, 1, 6, 6 };
+        vx_imagepatch_addressing_t addr =
+        {
+            rect.end_x - rect.start_x,
+            rect.end_y - rect.start_y,
+            1,
+            rect.end_x - rect.start_x
+        };
+
+        vx_size sz = 0;
+        void* ptr = 0;
+        vx_map_id src_map_id;
+        vx_imagepatch_addressing_t map_addr;
+        void *src_base = NULL;
+        vx_size numPixels;
+
+        VX_CALL(vxMapImagePatch(src, &rect, p, &src_map_id, &map_addr, &src_base, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+        numPixels = ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) *
+                     ((rect.end_y-rect.start_y) * VX_SCALE_UNITY/map_addr.scale_y);
+        sz = numPixels * map_addr.stride_x;
+        VX_CALL(vxUnmapImagePatch(src, src_map_id));
+
+        ptr = ct_alloc_mem(sz);
+
+        /* fill image patch with some values */
+        for (i = 0; i < addr.dim_y; i++)
+        {
+            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
+            for (j = 0; j < addr.dim_x; j++)
+            {
+                p[j] = (vx_uint8)(i + j);
+            }
+        }
+
+        /* copy patch to channel of original image */
+        vxCopyImagePatch(src, &rect, p, &addr, ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+
+        /* clean patch memory */
+        ct_memset(ptr, 0, sz);
+
+        /* get patch from image created from channel */
+        vxCopyImagePatch(tst, &rect, 0, &addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+
+        /* check changes of channel in original image has been reflected into channel image */
+        for (i = 0; i < addr.dim_y; i++)
+        {
+            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
+            for (j = 0; j < addr.dim_x; j++)
+            {
+                EXPECT_EQ_INT((vx_uint8)(i + j), p[j]);
+            }
+        }
+
+        ct_free_mem(ptr);
+    }
+
+    VX_CALL(vxReleaseImage(&ref));
+    VX_CALL(vxReleaseImage(&tst));
+    VX_CALL(vxReleaseImage(&src));
+} /* testChannelFromRandomImage() */
+
+TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromHandle, CreateImageFromChannel_Arg,
+    CREATE_IMAGE_FROM_CHANNEL_RANDOM_IMAGE_PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src = 0;
+    vx_image ref = 0;
+    vx_image tst = 0;
+
+    vx_uint32 width  = arg_->width;
+    vx_uint32 height = arg_->height;
+
+    CT_Image image = NULL;
+
+    ASSERT_NO_FAILURE(image = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+
+    {
+        vx_uint32 n;
+        vx_uint32 nplanes;
+
+        vx_enum channel[VX_PLANE_MAX] = { VX_CHANNEL_Y, VX_CHANNEL_U, VX_CHANNEL_V, 0 };
+
+        vx_imagepatch_addressing_t addr[VX_PLANE_MAX] =
+        {
+            VX_IMAGEPATCH_ADDR_INIT,
+            VX_IMAGEPATCH_ADDR_INIT,
+            VX_IMAGEPATCH_ADDR_INIT,
+            VX_IMAGEPATCH_ADDR_INIT
+        };
+        void* ptrs[VX_PLANE_MAX] = { 0, 0, 0, 0 };
+
+        ASSERT_NO_FAILURE(nplanes = ct_get_num_planes(arg_->format));
+
+        for (n = 0; n < nplanes; n++)
+        {
+            addr[n].dim_x    = image->width  / ct_image_get_channel_subsampling_x(image, channel[n]);
+            addr[n].dim_y    = image->height / ct_image_get_channel_subsampling_y(image, channel[n]);
+            addr[n].stride_x = ct_image_get_channel_step_x(image, channel[n]);
+            addr[n].stride_y = ct_image_get_channel_step_y(image, channel[n]);
+
+            ptrs[n] = ct_image_get_plane_base(image, n);
+        }
+
+        EXPECT_VX_OBJECT(src = vxCreateImageFromHandle(context, arg_->format, addr, ptrs, VX_MEMORY_TYPE_HOST), VX_TYPE_IMAGE);
+    }
+
+    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
+    {
+        width  /= 2;
+        height /= 2;
+    }
+
+    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
+    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
+
+    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
+
+    {
+        CT_Image image_ref = ct_image_from_vx_image(ref);
+        CT_Image image_tst = ct_image_from_vx_image(tst);
+
+        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
+    }
+
+    VX_CALL(vxReleaseImage(&ref));
+    VX_CALL(vxReleaseImage(&tst));
+    VX_CALL(vxReleaseImage(&src));
+} /* testChannelFromHandle() */
+
+
+/* ***************************************************************************
 //  vxCopyImagePatch tests
 */
 TESTCASE(vxCopyImagePatch, CT_VXContext, ct_setup_vx_context, 0)
@@ -2443,23 +2748,29 @@ TESTCASE(vxCopyImagePatch, CT_VXContext, ct_setup_vx_context, 0)
 typedef struct
 {
     const char* testName;
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
     const char* fileName;
     int width;
     int height;
     vx_df_image format;
+} CopyImagePatch_Arg;
 
-} ReadUniformImage_Arg;
+#define COPY_IMAGE_PATCH_UNIFORM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("uniform",      ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   ARG, NULL, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, ARG, NULL, NULL)
 
-
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, NULL)
+#define COPY_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("random",      ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   ARG, own_generate_rand_image, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, ARG, own_generate_rand_image, NULL)
 
 /*
 // test vxCopyImagePatch in READ_ONLY mode from uniform image,
 // independed from vxCopyImagePatch in write mode
 // or vxAccessImagePatch/vxCommitImagePatch functions
 */
-TEST_WITH_ARG(vxCopyImagePatch, testReadUniformImage, ReadUniformImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxCopyImagePatch, testReadUniformImage, CopyImagePatch_Arg,
+    COPY_IMAGE_PATCH_UNIFORM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -2484,8 +2795,24 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadUniformImage, ReadUniformImage_Arg, PARA
         vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
         void*   ptr = 0;
         vx_size sz  = 0;
+        vx_map_id image_map_id;
+        vx_imagepatch_addressing_t map_addr;
+        void *image_base = NULL;
+        vx_size numPixels;
 
-        sz = vxComputeImagePatchSize(image, &rect, (vx_uint32)plane);
+        VX_CALL(vxMapImagePatch(image, &rect, (vx_uint32)plane, &image_map_id, &map_addr, &image_base, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+        numPixels = ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) *
+                     ((rect.end_y-rect.start_y) * VX_SCALE_UNITY/map_addr.scale_y);
+        if (map_addr.stride_x == 0 && map_addr.stride_x_bits != 0)
+        {
+            sz = numPixels * (map_addr.stride_x_bits *
+                ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) / 8);
+        }
+        else
+        {
+            sz = numPixels * map_addr.stride_x;
+        }
+        VX_CALL(vxUnmapImagePatch(image, image_map_id));
 
         ptr = ct_alloc_mem(sz);
         ASSERT(NULL != ptr);
@@ -2493,7 +2820,12 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadUniformImage, ReadUniformImage_Arg, PARA
         addr.dim_x    = arg_->width  / own_plane_subsampling_x(arg_->format, plane);
         addr.dim_y    = arg_->height / own_plane_subsampling_y(arg_->format, plane);
         addr.stride_x = own_elem_size(arg_->format, plane);
-        addr.stride_y = addr.dim_x * addr.stride_x;
+        if (arg_->format == VX_DF_IMAGE_U1) {
+            addr.stride_x_bits = 1;
+            addr.stride_y = (addr.dim_x * addr.stride_x_bits + 7) / 8;
+        }
+        else
+            addr.stride_y = addr.dim_x * addr.stride_x;
 
         /* read image patch */
         VX_CALL(vxCopyImagePatch(image, &rect, plane, &addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
@@ -2510,24 +2842,9 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadUniformImage, ReadUniformImage_Arg, PARA
     return;
 } /* testReadUniformImage() */
 
-typedef struct
-{
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char* fileName;
-    int width;
-    int height;
-    vx_df_image format;
-
-} ReadRandomImage_Arg;
-
-#ifdef PARAMETERS
-#undef PARAMETERS
-#endif
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxCopyImagePatch, testReadRandomImage, ReadRandomImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxCopyImagePatch, testReadRandomImage, CopyImagePatch_Arg,
+    COPY_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -2560,7 +2877,24 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadRandomImage, ReadRandomImage_Arg, PARAME
         vx_size sz = 0;
         vx_uint32 elem_size = own_elem_size(arg_->format, plane);
 
-        sz = vxComputeImagePatchSize(image, &rect, plane);
+        vx_map_id image_map_id;
+        vx_imagepatch_addressing_t map_addr;
+        void *image_base = NULL;
+        vx_size numPixels;
+
+        VX_CALL(vxMapImagePatch(image, &rect, (vx_uint32)plane, &image_map_id, &map_addr, &image_base, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+        numPixels = ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) *
+                     ((rect.end_y-rect.start_y) * VX_SCALE_UNITY/map_addr.scale_y);
+        if (map_addr.stride_x == 0 && map_addr.stride_x_bits != 0)
+        {
+            sz = numPixels * (map_addr.stride_x_bits *
+                ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) / 8);
+        }
+        else
+        {
+            sz = numPixels * map_addr.stride_x;
+        }
+        VX_CALL(vxUnmapImagePatch(image, image_map_id));
 
         ptr = ct_alloc_mem(sz);
         ASSERT(NULL != ptr);
@@ -2568,7 +2902,12 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadRandomImage, ReadRandomImage_Arg, PARAME
         tst_addr.dim_x    = arg_->width  / own_plane_subsampling_x(arg_->format, plane);
         tst_addr.dim_y    = arg_->height / own_plane_subsampling_y(arg_->format, plane);
         tst_addr.stride_x = elem_size;
-        tst_addr.stride_y = tst_addr.dim_x * tst_addr.stride_x;
+        if (arg_->format == VX_DF_IMAGE_U1) {
+            tst_addr.stride_x_bits = 1;
+            tst_addr.stride_y = (tst_addr.dim_x * tst_addr.stride_x_bits + 7) / 8;
+        }
+        else
+            tst_addr.stride_y = tst_addr.dim_x * tst_addr.stride_x;
 
         VX_CALL(vxCopyImagePatch(image, &rect, plane, &tst_addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
@@ -2584,25 +2923,9 @@ TEST_WITH_ARG(vxCopyImagePatch, testReadRandomImage, ReadRandomImage_Arg, PARAME
     return;
 } /* testReadRandomImage() */
 
-
-typedef struct
-{
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char* fileName;
-    int width;
-    int height;
-    vx_df_image format;
-
-} WriteRandomImage_Arg;
-
-#ifdef PARAMETERS
-#undef PARAMETERS
-#endif
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxCopyImagePatch, testWriteRandomImage, WriteRandomImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxCopyImagePatch, testWriteRandomImage, CopyImagePatch_Arg,
+    COPY_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -2643,7 +2966,24 @@ TEST_WITH_ARG(vxCopyImagePatch, testWriteRandomImage, WriteRandomImage_Arg, PARA
         vx_size sz = 0;
         vx_uint32 elem_size = own_elem_size(arg_->format, plane);
 
-        sz = vxComputeImagePatchSize(image, &rect, plane);
+        vx_map_id image_map_id;
+        vx_imagepatch_addressing_t map_addr;
+        void *image_base = NULL;
+        vx_size numPixels;
+
+        VX_CALL(vxMapImagePatch(image, &rect, (vx_uint32)plane, &image_map_id, &map_addr, &image_base, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+        numPixels = ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) *
+                     ((rect.end_y-rect.start_y) * VX_SCALE_UNITY/map_addr.scale_y);
+        if (map_addr.stride_x == 0 && map_addr.stride_x_bits != 0)
+        {
+            sz = numPixels * (map_addr.stride_x_bits *
+                ((rect.end_x-rect.start_x) * VX_SCALE_UNITY/map_addr.scale_x) / 8);
+        }
+        else
+        {
+            sz = numPixels * map_addr.stride_x;
+        }
+        VX_CALL(vxUnmapImagePatch(image, image_map_id));
 
         ptr = ct_alloc_mem(sz);
         ASSERT(NULL != ptr);
@@ -2651,7 +2991,12 @@ TEST_WITH_ARG(vxCopyImagePatch, testWriteRandomImage, WriteRandomImage_Arg, PARA
         tst_addr.dim_x    = arg_->width  / own_plane_subsampling_x(arg_->format, plane);
         tst_addr.dim_y    = arg_->height / own_plane_subsampling_y(arg_->format, plane);
         tst_addr.stride_x = elem_size;
-        tst_addr.stride_y = tst_addr.dim_x * tst_addr.stride_x;
+        if (arg_->format == VX_DF_IMAGE_U1) {
+            tst_addr.stride_x_bits = 1;
+            tst_addr.stride_y = (tst_addr.dim_x * tst_addr.stride_x_bits + 7) / 8;
+        }
+        else
+            tst_addr.stride_y = tst_addr.dim_x * tst_addr.stride_x;
 
         VX_CALL(vxCopyImagePatch(image, &rect, plane, &tst_addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
@@ -2676,24 +3021,29 @@ TESTCASE(vxMapImagePatch, CT_VXContext, ct_setup_vx_context, 0)
 typedef struct
 {
     const char* testName;
+    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
     const char* fileName;
     int width;
     int height;
     vx_df_image format;
+} MapImagePatch_Arg;
 
-} MapReadUniformImage_Arg;
+#define MAP_IMAGE_PATCH_UNIFORM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("uniform",      ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   ARG, NULL, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, ARG, NULL, NULL)
 
-
-#undef PARAMETERS
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, NULL)
+#define MAP_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS \
+    CT_GENERATE_PARAMETERS("random",      ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMATS,   ARG, own_generate_rand_image, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_U1, ARG, own_generate_rand_image, NULL)
 
 /*
 // test vxMapImagePatch in READ_ONLY mode from uniform image,
 // independed from vxMapImagePatch/vxCopyImagePatch in write mode
 // or vxAccessImagePatch/vxCommitImagePatch functions
 */
-TEST_WITH_ARG(vxMapImagePatch, testMapReadUniformImage, MapReadUniformImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxMapImagePatch, testMapReadUniformImage, MapImagePatch_Arg,
+    MAP_IMAGE_PATCH_UNIFORM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -2729,6 +3079,13 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadUniformImage, MapReadUniformImage_Arg,
             {
                 switch (arg_->format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8* tst = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &addr);
+                    ASSERT_EQ_INT(ref_val.U1 ? 1 : 0, (tst[0] & (1 << (x % 8))) >> (x % 8));
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* tst = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &addr);
@@ -2865,24 +3222,9 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadUniformImage, MapReadUniformImage_Arg,
     return;
 } /* testMapReadUniformImage() */
 
-typedef struct
-{
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char* fileName;
-    int width;
-    int height;
-    vx_df_image format;
-
-} MapReadRandomImage_Arg;
-
-#ifdef PARAMETERS
-#undef PARAMETERS
-#endif
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxMapImagePatch, testMapReadRandomImage, MapReadRandomImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxMapImagePatch, testMapReadRandomImage, MapImagePatch_Arg,
+    MAP_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -2929,24 +3271,9 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadRandomImage, MapReadRandomImage_Arg, P
     return;
 } /* testMapReadRandomImage() */
 
-typedef struct
-{
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char* fileName;
-    int width;
-    int height;
-    vx_df_image format;
-
-} MapReadWriteRandomImage_Arg;
-
-#ifdef PARAMETERS
-#undef PARAMETERS
-#endif
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxMapImagePatch, testMapReadWriteRandomImage, MapReadWriteRandomImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxMapImagePatch, testMapReadWriteRandomImage, MapImagePatch_Arg,
+    MAP_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -3000,6 +3327,15 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadWriteRandomImage, MapReadWriteRandomIm
             {
                 switch (arg_->format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8 offset = x % 8;
+                    vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &tst_addr);
+                    tst_ptr[0] = ( tst_ptr[0] & ~(1 << offset)) |
+                                 (~tst_ptr[0] &  (1 << offset));
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &tst_addr);
@@ -3130,6 +3466,17 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadWriteRandomImage, MapReadWriteRandomIm
             {
                 switch (arg_->format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8  offset  = x % 8;
+                    vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ct_stride_bytes(ref) +
+                                                    (x * ct_image_bits_per_pixel(VX_DF_IMAGE_U1)) / 8);
+                    vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &tst_addr);
+                    ASSERT_EQ_INT(( ref_ptr[0] & (1 << offset)) >> offset,
+                                  (~tst_ptr[0] & (1 << offset)) >> offset);
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ref->stride * elem_size + x * elem_size);
@@ -3261,24 +3608,9 @@ TEST_WITH_ARG(vxMapImagePatch, testMapReadWriteRandomImage, MapReadWriteRandomIm
     return;
 } /* testMapReadWriteRandomImage() */
 
-typedef struct
-{
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char* fileName;
-    int width;
-    int height;
-    vx_df_image format;
-
-} MapWriteRandomImage_Arg;
-
-#ifdef PARAMETERS
-#undef PARAMETERS
-#endif
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("random", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxMapImagePatch, testMapWriteRandomImage, MapWriteRandomImage_Arg, PARAMETERS)
+TEST_WITH_ARG(vxMapImagePatch, testMapWriteRandomImage, MapImagePatch_Arg,
+    MAP_IMAGE_PATCH_RANDOM_IMAGE_PARAMETERS
+)
 {
     vx_context context = context_->vx_context_;
 
@@ -3327,6 +3659,17 @@ TEST_WITH_ARG(vxMapImagePatch, testMapWriteRandomImage, MapWriteRandomImage_Arg,
             {
                 switch (arg_->format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8  offset  = x % 8;
+                    vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ct_stride_bytes(ref) +
+                                                    (x * ct_image_bits_per_pixel(VX_DF_IMAGE_U1)) / 8);
+                    vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &tst_addr);
+                    tst_ptr[0] = (( tst_ptr[0] & ~(1 << offset)) |
+                                  (~ref_ptr[0] &  (1 << offset)));
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ref->stride * elem_size + x * elem_size);
@@ -3471,6 +3814,17 @@ TEST_WITH_ARG(vxMapImagePatch, testMapWriteRandomImage, MapWriteRandomImage_Arg,
             {
                 switch (arg_->format)
                 {
+                case VX_DF_IMAGE_U1:
+                {
+                    vx_uint8  offset  = x % 8;
+                    vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ct_stride_bytes(ref) +
+                                                    (x * ct_image_bits_per_pixel(VX_DF_IMAGE_U1)) / 8);
+                    vx_uint8* tst_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(ptr, x, y, &tst_addr);
+                    ASSERT_EQ_INT(( ref_ptr[0] & (1 << offset)) >> offset,
+                                  (~tst_ptr[0] & (1 << offset)) >> offset);
+                }
+                break;
+
                 case VX_DF_IMAGE_U8:
                 {
                     vx_uint8* ref_ptr = (vx_uint8*)((vx_uint8*)ref->data.y + y * ref->stride * elem_size + x * elem_size);
@@ -3602,310 +3956,9 @@ TEST_WITH_ARG(vxMapImagePatch, testMapWriteRandomImage, MapWriteRandomImage_Arg,
     return;
 } /* testMapWriteRandomImage() */
 
-
-/* ***************************************************************************
-//  vxCreateImageFromChannel tests
-*/
-TESTCASE(vxCreateImageFromChannel, CT_VXContext, ct_setup_vx_context, 0)
-
-typedef struct
-{
-    const char*      testName;
-    CT_Image(*generator)(const char* fileName, int width, int height, vx_df_image format);
-    const char*      fileName;
-    int              width;
-    int              height;
-    vx_df_image      format;
-    vx_enum          channel;
-
-} CreateImageFromChannel_Arg;
-
-
-#define ADD_IMAGE_FORMAT_444(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_YUV4", __VA_ARGS__, VX_DF_IMAGE_YUV4))
-
-#define ADD_IMAGE_FORMAT_420(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_IYUV", __VA_ARGS__, VX_DF_IMAGE_IYUV)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV12", __VA_ARGS__, VX_DF_IMAGE_NV12)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_DF_IMAGE_NV21", __VA_ARGS__, VX_DF_IMAGE_NV21))
-
-#define ADD_IMAGE_CHANNEL_YUV(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_Y", __VA_ARGS__, VX_CHANNEL_Y)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_U", __VA_ARGS__, VX_CHANNEL_U)), \
-    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_V", __VA_ARGS__, VX_CHANNEL_V))
-
-#define ADD_IMAGE_CHANNEL_Y(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/VX_CHANNEL_Y", __VA_ARGS__, VX_CHANNEL_Y))
-
-#undef PARAMETERS
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_444, ADD_IMAGE_CHANNEL_YUV, ARG, NULL, NULL), \
-    CT_GENERATE_PARAMETERS("uniform", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_420, ADD_IMAGE_CHANNEL_Y, ARG, NULL, NULL)
-
-
-TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromUniformImage, CreateImageFromChannel_Arg, PARAMETERS)
-{
-    vx_context context = context_->vx_context_;
-    vx_image src = 0;
-    vx_image ref = 0;
-    vx_image tst = 0;
-    vx_uint32 width  = arg_->width;
-    vx_uint32 height = arg_->height;
-    vx_pixel_value_t pixel_value;
-
-    pixel_value.YUV[0] = 0x55;
-    pixel_value.YUV[1] = 0xAA;
-    pixel_value.YUV[2] = 0x33;
-
-    EXPECT_VX_OBJECT(src = vxCreateUniformImage(context, arg_->width, arg_->height, arg_->format, &pixel_value), VX_TYPE_IMAGE);
-
-    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
-    {
-        width  /= 2;
-        height /= 2;
-    }
-
-    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
-    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
-
-    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
-
-    {
-        CT_Image image_ref = ct_image_from_vx_image(ref);
-        CT_Image image_tst = ct_image_from_vx_image(tst);
-
-        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
-    }
-
-    VX_CALL(vxReleaseImage(&ref));
-    VX_CALL(vxReleaseImage(&tst));
-    VX_CALL(vxReleaseImage(&src));
-}
-
-#undef PARAMETERS
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_444, ADD_IMAGE_CHANNEL_YUV, ARG, own_generate_rand_image, NULL), \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_420, ADD_IMAGE_CHANNEL_Y, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromRandomImage, CreateImageFromChannel_Arg, PARAMETERS)
-{
-    vx_context context = context_->vx_context_;
-    vx_image src = 0;
-    vx_image ref = 0;
-    vx_image tst = 0;
-    vx_uint32 width  = arg_->width;
-    vx_uint32 height = arg_->height;
-    CT_Image image = NULL;
-
-    ASSERT_NO_FAILURE(image = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
-
-    EXPECT_VX_OBJECT(src = ct_image_to_vx_image(image, context), VX_TYPE_IMAGE);
-
-    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
-    {
-        width  /= 2;
-        height /= 2;
-    }
-
-    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
-    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
-
-    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
-
-    {
-        /* 1. check if image created from channel is equal to channel extracted from image */
-        CT_Image image_ref = ct_image_from_vx_image(ref);
-        CT_Image image_tst = ct_image_from_vx_image(tst);
-
-        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
-    }
-
-    {
-        /* 2. check if modification of image created from channel reflected into channel of original image */
-        vx_uint32 i;
-        vx_uint32 j;
-        vx_uint32 p = (VX_CHANNEL_Y == arg_->channel ? 0 : (VX_CHANNEL_U == arg_->channel ? 1 : 2));
-        vx_rectangle_t rect = { 1, 1, 6, 6 };
-        vx_imagepatch_addressing_t addr =
-        {
-            rect.end_x - rect.start_x,
-            rect.end_y - rect.start_y,
-            1,
-            rect.end_x - rect.start_x
-        };
-
-        vx_size sz = 0;
-        void* ptr = 0;
-
-        sz = vxComputeImagePatchSize(tst, &rect, 0);
-
-        ptr = ct_alloc_mem(sz);
-
-        /* fill image patch with some values */
-        for (i = 0; i < addr.dim_y; i++)
-        {
-            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
-            for (j = 0; j < addr.dim_x; j++)
-            {
-                p[j] = (vx_uint8)(i + j);
-            }
-        }
-
-        /* copy patch to channel image */
-        vxCopyImagePatch(tst, &rect, 0, &addr, ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
-
-        /* clean patch memory */
-        ct_memset(ptr, 0, sz);
-
-        /* get channel patch from original image */
-        vxCopyImagePatch(src, &rect, p, &addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
-
-        /* check channel changes has been reflected into original image */
-        for (i = 0; i < addr.dim_y; i++)
-        {
-            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
-            for (j = 0; j < addr.dim_x; j++)
-            {
-                EXPECT_EQ_INT((vx_uint8)(i + j), p[j]);
-            }
-        }
-
-        ct_free_mem(ptr);
-    }
-
-    {
-        /* 3. check if modification of channel in original image reflected into image created from channel */
-        vx_uint32 i;
-        vx_uint32 j;
-        vx_uint32 p = (VX_CHANNEL_Y == arg_->channel ? 0 : (VX_CHANNEL_U == arg_->channel ? 1 : 2));
-        vx_rectangle_t rect = { 1, 1, 6, 6 };
-        vx_imagepatch_addressing_t addr =
-        {
-            rect.end_x - rect.start_x,
-            rect.end_y - rect.start_y,
-            1,
-            rect.end_x - rect.start_x
-        };
-
-        vx_size sz = 0;
-        void* ptr = 0;
-
-        sz = vxComputeImagePatchSize(src, &rect, p);
-
-        ptr = ct_alloc_mem(sz);
-
-        /* fill image patch with some values */
-        for (i = 0; i < addr.dim_y; i++)
-        {
-            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
-            for (j = 0; j < addr.dim_x; j++)
-            {
-                p[j] = (vx_uint8)(i + j);
-            }
-        }
-
-        /* copy patch to channel of original image */
-        vxCopyImagePatch(src, &rect, p, &addr, ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
-
-        /* clean patch memory */
-        ct_memset(ptr, 0, sz);
-
-        /* get patch from image created from channel */
-        vxCopyImagePatch(tst, &rect, 0, &addr, ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
-
-        /* check changes of channel in original image has been reflected into channel image */
-        for (i = 0; i < addr.dim_y; i++)
-        {
-            vx_uint8* p = (vx_uint8*)ptr + i * addr.stride_x;
-            for (j = 0; j < addr.dim_x; j++)
-            {
-                EXPECT_EQ_INT((vx_uint8)(i + j), p[j]);
-            }
-        }
-
-        ct_free_mem(ptr);
-    }
-
-    VX_CALL(vxReleaseImage(&ref));
-    VX_CALL(vxReleaseImage(&tst));
-    VX_CALL(vxReleaseImage(&src));
-}
-
-#undef PARAMETERS
-#define PARAMETERS \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_444, ADD_IMAGE_CHANNEL_YUV, ARG, own_generate_rand_image, NULL), \
-    CT_GENERATE_PARAMETERS("rand", ADD_SIZE_SMALL_SET, ADD_IMAGE_FORMAT_420, ADD_IMAGE_CHANNEL_Y, ARG, own_generate_rand_image, NULL)
-
-TEST_WITH_ARG(vxCreateImageFromChannel, testChannelFromHandle, CreateImageFromChannel_Arg, PARAMETERS)
-{
-    vx_context context = context_->vx_context_;
-    vx_image src = 0;
-    vx_image ref = 0;
-    vx_image tst = 0;
-
-    vx_uint32 width  = arg_->width;
-    vx_uint32 height = arg_->height;
-
-    CT_Image image = NULL;
-
-    ASSERT_NO_FAILURE(image = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
-
-    {
-        vx_uint32 n;
-        vx_uint32 nplanes;
-
-        vx_enum channel[VX_PLANE_MAX] = { VX_CHANNEL_Y, VX_CHANNEL_U, VX_CHANNEL_V, 0 };
-
-        vx_imagepatch_addressing_t addr[VX_PLANE_MAX] =
-        {
-            VX_IMAGEPATCH_ADDR_INIT,
-            VX_IMAGEPATCH_ADDR_INIT,
-            VX_IMAGEPATCH_ADDR_INIT,
-            VX_IMAGEPATCH_ADDR_INIT
-        };
-        void* ptrs[VX_PLANE_MAX] = { 0, 0, 0, 0 };
-
-        ASSERT_NO_FAILURE(nplanes = ct_get_num_planes(arg_->format));
-
-        for (n = 0; n < nplanes; n++)
-        {
-            addr[n].dim_x    = image->width  / ct_image_get_channel_subsampling_x(image, channel[n]);
-            addr[n].dim_y    = image->height / ct_image_get_channel_subsampling_y(image, channel[n]);
-            addr[n].stride_x = ct_image_get_channel_step_x(image, channel[n]);
-            addr[n].stride_y = ct_image_get_channel_step_y(image, channel[n]);
-
-            ptrs[n] = ct_image_get_plane_base(image, n);
-        }
-
-        EXPECT_VX_OBJECT(src = vxCreateImageFromHandle(context, arg_->format, addr, ptrs, VX_MEMORY_TYPE_HOST), VX_TYPE_IMAGE);
-    }
-
-    if (VX_CHANNEL_Y != arg_->channel && VX_DF_IMAGE_IYUV == arg_->format)
-    {
-        width  /= 2;
-        height /= 2;
-    }
-
-    EXPECT_VX_OBJECT(ref = vxCreateImage(context, width, height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
-    VX_CALL(vxuChannelExtract(context, src, arg_->channel, ref));
-
-    EXPECT_VX_OBJECT(tst = vxCreateImageFromChannel(src, arg_->channel), VX_TYPE_IMAGE);
-
-    {
-        CT_Image image_ref = ct_image_from_vx_image(ref);
-        CT_Image image_tst = ct_image_from_vx_image(tst);
-
-        EXPECT_EQ_CTIMAGE(image_ref, image_tst);
-    }
-
-    VX_CALL(vxReleaseImage(&ref));
-    VX_CALL(vxReleaseImage(&tst));
-    VX_CALL(vxReleaseImage(&src));
-}
-
-
 TESTCASE_TESTS(Image,
     testRngImageCreation,
+    testImageCreation_U1,
     testVirtualImageCreation,
     testVirtualImageCreationDims,
     testCreateImageFromHandle,
@@ -3914,26 +3967,29 @@ TESTCASE_TESTS(Image,
     testConvert_CT_Image,
     testvxSetImagePixelValues,
     testUniformImage,
-    testComputeImagePatchSize,
     DISABLED_testAccessCopyWrite,
     DISABLED_testAccessCopyRead,
     DISABLED_testAccessCopyWriteUniformImage,
     testQueryImage
-    )
+)
+
+TESTCASE_TESTS(vxCreateImageFromChannel,
+    testChannelFromUniformImage,
+    testChannelFromRandomImage,
+    testChannelFromHandle
+)
 
 TESTCASE_TESTS(vxCopyImagePatch,
     testReadUniformImage,
     testReadRandomImage,
-    testWriteRandomImage)
+    testWriteRandomImage
+)
 
 TESTCASE_TESTS(vxMapImagePatch,
     testMapReadUniformImage,
     testMapReadRandomImage,
     testMapReadWriteRandomImage,
-    testMapWriteRandomImage)
+    testMapWriteRandomImage
+)
 
-TESTCASE_TESTS(vxCreateImageFromChannel,
-    testChannelFromUniformImage,
-    testChannelFromRandomImage,
-    testChannelFromHandle)
-
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

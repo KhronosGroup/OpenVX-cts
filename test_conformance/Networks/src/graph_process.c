@@ -1,5 +1,5 @@
 /** @file graph_process.c
- *  @brief 
+ *  @brief
  *  This file contains the implementation of the graph inputs/outputs processing functions
  */
 
@@ -127,7 +127,7 @@ float* CropImage(vx_size dims[VX_MAX_TENSOR_DIMENSIONS], int chans, int width,
 
 vx_status preprocess(vx_tensor input, const char * fName)
 {
-    //1. Load image 
+    //1. Load image
     //2. Normalize the image pixels the same way you used in the training process (i.e, mean substraction, scaling, etc)
     //3. Scale each pixel with the scale factor ModelOptimizer reported
     //4. Convert each pixel to the required precision (Q78, FP16, etc)
@@ -160,12 +160,11 @@ vx_status preprocess(vx_tensor input, const char * fName)
 
 vx_status postprocess(vx_tensor output, /*OUT*/ int* detected_class)
 {
-    //1. Find top-N probabilities indices in the output tensor. 
-    //2. Probabilities must be converted back to floating point number in order to be interpreted as percentages 
+    //1. Find top-N probabilities indices in the output tensor.
+    //2. Probabilities must be converted back to floating point number in order to be interpreted as percentages
 
     //getProbabilitiesFromMDData(...)
     vx_int16 mem[1000] = {0};
-    float prob[1000] = {0};
 
     const vx_size view_start[2] = { 0, 0 };
     const vx_size view_end[2] = { 1000, 1 };
@@ -207,18 +206,18 @@ static vx_status saveTensorData(vx_tensor tensor, const char * fn)
     vx_status status = vxQueryTensor(tensor, VX_TENSOR_NUMBER_OF_DIMS, &dims_num, sizeof(dims_num));
 
     vx_size *dims = (vx_size*)malloc(dims_num * sizeof(vx_size));
-    if (!dims) 
+    if (!dims)
     {
-        fclose(f); 
-        return VX_ERROR_NO_MEMORY; 
+        fclose(f);
+        return VX_ERROR_NO_MEMORY;
     }
 
     status = vxQueryTensor(tensor, VX_TENSOR_DIMS, dims, sizeof(vx_size) * dims_num);
-    if (status != VX_SUCCESS) 
+    if (status != VX_SUCCESS)
     {
-        fclose(f); 
+        fclose(f);
         free(dims);
-        return status; 
+        return status;
     }
 
     vx_size count = 1;
@@ -270,6 +269,6 @@ vx_status debugDumpLayers(ObjectRefContainerType * vxObjectsContainer)
     }
 
     fclose(f);
-    
+
     return VX_SUCCESS;
 }

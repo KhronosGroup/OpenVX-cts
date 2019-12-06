@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
 
-
 TESTCASE(Erode3x3, CT_VXContext, ct_setup_vx_context, 0)
-
 
 TEST(Erode3x3, testNodeCreation)
 {
@@ -49,33 +49,62 @@ TEST(Erode3x3, testNodeCreation)
     ASSERT(src_image == 0);
 }
 
-
-// VX_DF_IMAGE_8U Boolean image
-static CT_Image erode3x3_generate_random(const char* fileName, int width, int height)
+static CT_Image erode3x3_generate_random(const char* fileName, int width, int height, vx_df_image format)
 {
     CT_Image image;
 
-    ASSERT_NO_FAILURE_(return 0,
-            image = ct_allocate_ct_image_random(width, height, VX_DF_IMAGE_U8, &CT()->seed_, 0, 2));
+    ASSERT_(return 0, format == VX_DF_IMAGE_U1 || format == VX_DF_IMAGE_U8);
 
-    // convert 0/1 values to 0/255
-    CT_FILL_IMAGE_8U(return 0, image,
-            *dst_data = (*dst_data) ? 255 : 0);
+    ASSERT_NO_FAILURE_(return 0, image = ct_allocate_ct_image_random(width, height, format, &CT()->seed_, 0, 2));
+
+    if (format == VX_DF_IMAGE_U8)
+    {
+        // convert 0/1 values to 0/255
+        CT_FILL_IMAGE_8U(return 0, image, *dst_data = (*dst_data) ? 255 : 0);
+    }
 
     return image;
 }
 
-static CT_Image erode3x3_read_image(const char* fileName, int width, int height)
+static CT_Image erode3x3_read_image(const char* fileName, int width, int height, vx_df_image format)
 {
-    CT_Image image = NULL;
+    CT_Image image_load = NULL, image_ret = NULL;
     ASSERT_(return 0, width == 0 && height == 0);
-    image = ct_read_image(fileName, 1);
-    ASSERT_(return 0, image);
-    ASSERT_(return 0, image->format == VX_DF_IMAGE_U8);
-    return image;
+    ASSERT_(return 0, format == VX_DF_IMAGE_U1 || format == VX_DF_IMAGE_U8);
+
+    image_load = ct_read_image(fileName, 1);
+    ASSERT_(return 0, image_load);
+    ASSERT_(return 0, image_load->format == VX_DF_IMAGE_U8);
+
+    if (format == VX_DF_IMAGE_U1)
+    {
+        ASSERT_NO_FAILURE_(return 0, threshold_U8_ct_image(image_load, 127));   // Threshold to make the U1 image less trivial
+        ASSERT_NO_FAILURE_(return 0, image_ret = ct_allocate_image(image_load->width, image_load->height, VX_DF_IMAGE_U1));
+        ASSERT_NO_FAILURE_(return 0, U8_ct_image_to_U1_ct_image(image_load, image_ret));
+    }
+    else
+        image_ret = image_load;
+
+    ASSERT_(return 0, image_ret);
+    ASSERT_(return 0, image_ret->format == format);
+
+    return image_ret;
 }
 
-static int32_t erode_get(int32_t *values)
+static int32_t erode_get_U1(int32_t values[9][2])
+{
+    int i;
+    int32_t v_i;
+    int32_t v = (values[0][0] & (1 << (values[0][1] % 8))) >> (values[0][1] % 8);
+    for (i = 1; i < 9; i++)
+    {
+        v_i = (values[i][0] & (1 << (values[i][1] % 8))) >> (values[i][1] % 8);
+        v = (v > v_i) ? v_i : v;
+    }
+    return v;
+}
+
+static int32_t erode_get_U8(int32_t *values)
 {
     int i;
     int32_t v = values[0];
@@ -86,54 +115,109 @@ static int32_t erode_get(int32_t *values)
 
 static uint8_t erode3x3_calculate(CT_Image src, uint32_t x, uint32_t y)
 {
-    int32_t values[9] = {
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y + 0),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y + 0),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y + 0),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y - 1),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y - 1),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y - 1),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y + 1),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y + 1),
-        (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y + 1)
-    };
-    return (uint8_t)erode_get(values);
+    if (src->format == VX_DF_IMAGE_U1)
+    {
+        int32_t values[9][2] = {
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 0, y + 0), (int32_t)x + 0},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x - 1, y + 0), (int32_t)x - 1},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 1, y + 0), (int32_t)x + 1},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 0, y - 1), (int32_t)x + 0},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x - 1, y - 1), (int32_t)x - 1},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 1, y - 1), (int32_t)x + 1},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 0, y + 1), (int32_t)x + 0},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x - 1, y + 1), (int32_t)x - 1},
+            {(int32_t)*CT_IMAGE_DATA_PTR_1U(src, x + 1, y + 1), (int32_t)x + 1}
+        };
+        return (uint8_t)erode_get_U1(values);
+    }
+    else
+    {
+        int32_t values[9] = {
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y + 0),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y + 0),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y + 0),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y - 1),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y - 1),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y - 1),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 0, y + 1),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x - 1, y + 1),
+            (int32_t)*CT_IMAGE_DATA_PTR_8U(src, x + 1, y + 1)
+        };
+        return (uint8_t)erode_get_U8(values);
+    }
 }
 
 static uint8_t erode3x3_calculate_replicate(CT_Image src, uint32_t x_, uint32_t y_)
 {
     int32_t x = (int)x_;
     int32_t y = (int)y_;
-    int32_t values[9] = {
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y + 0),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y + 0),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y + 0),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y - 1),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y - 1),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y - 1),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y + 1),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y + 1),
-        (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y + 1)
-    };
-    return (uint8_t)erode_get(values);
+    if (src->format == VX_DF_IMAGE_U1)
+    {
+        int32_t values[9] = {
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 0, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x - 1, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 1, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 0, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x - 1, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 1, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 0, y + 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x - 1, y + 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_1U(src, x + 1, y + 1)
+        };
+        return (uint8_t)erode_get_U8(values);
+    }
+    else
+    {
+        int32_t values[9] = {
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y + 0),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y - 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 0, y + 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x - 1, y + 1),
+            (int32_t)CT_IMAGE_DATA_REPLICATE_8U(src, x + 1, y + 1)
+        };
+        return (uint8_t)erode_get_U8(values);
+    }
 }
 
 static uint8_t erode3x3_calculate_constant(CT_Image src, uint32_t x_, uint32_t y_, vx_uint32 constant_value)
 {
     int32_t x = (int)x_;
     int32_t y = (int)y_;
-    int32_t values[9] = {
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y + 0, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y + 0, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y + 0, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y - 1, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y - 1, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y - 1, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y + 1, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y + 1, constant_value),
-        (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y + 1, constant_value)
-    };
-    return (uint8_t)erode_get(values);
+    if (src->format == VX_DF_IMAGE_U1)
+    {
+        vx_bool const_val_bool = (constant_value == 0) ? vx_false_e : vx_true_e;
+        int32_t values[9] = {
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 0, y + 0, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x - 1, y + 0, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 1, y + 0, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 0, y - 1, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x - 1, y - 1, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 1, y - 1, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 0, y + 1, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x - 1, y + 1, const_val_bool),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_1U(src, x + 1, y + 1, const_val_bool)
+        };
+        return (uint8_t)erode_get_U8(values);
+    }
+    else
+    {
+        int32_t values[9] = {
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y + 0, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y + 0, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y + 0, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y - 1, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y - 1, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y - 1, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 0, y + 1, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x - 1, y + 1, constant_value),
+            (int32_t)CT_IMAGE_DATA_CONSTANT_8U(src, x + 1, y + 1, constant_value)
+        };
+        return (uint8_t)erode_get_U8(values);
+    }
 }
 
 
@@ -141,35 +225,72 @@ static CT_Image erode3x3_create_reference_image(CT_Image src, vx_border_t border
 {
     CT_Image dst;
 
-    CT_ASSERT_(return NULL, src->format == VX_DF_IMAGE_U8);
+    CT_ASSERT_(return NULL, src->format == VX_DF_IMAGE_U1 || src->format == VX_DF_IMAGE_U8);
 
     dst = ct_allocate_image(src->width, src->height, src->format);
 
     if (border.mode == VX_BORDER_UNDEFINED)
     {
-        CT_FILL_IMAGE_8U(return 0, dst,
-                if (x >= 1 && y >= 1 && x < src->width - 1 && y < src->height - 1)
-                {
-                    uint8_t res = erode3x3_calculate(src, x, y);
-                    *dst_data = res;
-                });
+        if (src->format == VX_DF_IMAGE_U1)
+        {
+            CT_FILL_IMAGE_1U(return 0, dst,
+                    if (x >= 1 && y >= 1 && x < src->width - 1 && y < src->height - 1)
+                    {
+                        vx_uint32 xShftdSrc = x + src->roi.x % 8;
+                        uint8_t res = erode3x3_calculate(src, xShftdSrc, y);
+                        *dst_data = (*dst_data & ~(1 << offset)) | (res << offset);
+                    });
+        }
+        else
+        {
+            CT_FILL_IMAGE_8U(return 0, dst,
+                    if (x >= 1 && y >= 1 && x < src->width - 1 && y < src->height - 1)
+                    {
+                        uint8_t res = erode3x3_calculate(src, x, y);
+                        *dst_data = res;
+                    });
+        }
     }
     else if (border.mode == VX_BORDER_REPLICATE)
     {
-        CT_FILL_IMAGE_8U(return 0, dst,
-                {
-                    uint8_t res = erode3x3_calculate_replicate(src, x, y);
-                    *dst_data = res;
-                });
+        if (src->format == VX_DF_IMAGE_U1)
+        {
+            CT_FILL_IMAGE_1U(return 0, dst,
+                    {
+                        vx_uint32 xShftdSrc = x + src->roi.x % 8;
+                        uint8_t res = erode3x3_calculate_replicate(src, xShftdSrc, y);
+                        *dst_data = (*dst_data & ~(1 << offset)) | (res << offset);
+                    });
+        }
+        else
+        {
+            CT_FILL_IMAGE_8U(return 0, dst,
+                    {
+                        uint8_t res = erode3x3_calculate_replicate(src, x, y);
+                        *dst_data = res;
+                    });
+        }
     }
     else if (border.mode == VX_BORDER_CONSTANT)
     {
         vx_uint32 constant_value = border.constant_value.U32;
-        CT_FILL_IMAGE_8U(return 0, dst,
-                {
-                    uint8_t res = erode3x3_calculate_constant(src, x, y, constant_value);
-                    *dst_data = res;
-                });
+        if (src->format == VX_DF_IMAGE_U1)
+        {
+            CT_FILL_IMAGE_1U(return 0, dst,
+                    {
+                        vx_uint32 xShftdSrc = x + src->roi.x % 8;
+                        uint8_t res = erode3x3_calculate_constant(src, xShftdSrc, y, constant_value);
+                        *dst_data = (*dst_data & ~(1 << offset)) | (res << offset);
+                    });
+        }
+        else
+        {
+            CT_FILL_IMAGE_8U(return 0, dst,
+                    {
+                        uint8_t res = erode3x3_calculate_constant(src, x, y, constant_value);
+                        *dst_data = res;
+                    });
+        }
     }
     else
     {
@@ -211,15 +332,18 @@ static void erode3x3_check(CT_Image src, CT_Image dst, vx_border_t border)
 
 typedef struct {
     const char* testName;
-    CT_Image (*generator)(const char* fileName, int width, int height);
+    CT_Image (*generator)(const char* fileName, int width, int height, vx_df_image format);
     const char* fileName;
     vx_border_t border;
     int width, height;
+    vx_df_image format;
 } Arg;
 
 #define PARAMETERS \
-    CT_GENERATE_PARAMETERS("randomInput", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ARG, erode3x3_generate_random, NULL), \
-    CT_GENERATE_PARAMETERS("lena", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ARG, erode3x3_read_image, "lena.bmp")
+    CT_GENERATE_PARAMETERS("randomInput", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U8, ARG, erode3x3_generate_random, NULL), \
+    CT_GENERATE_PARAMETERS("lena", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ADD_TYPE_U8, ARG, erode3x3_read_image, "lena.bmp"), \
+    CT_GENERATE_PARAMETERS("_U1_/randomInput", ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_SMALL_SET, ADD_TYPE_U1, ARG, erode3x3_generate_random, NULL), \
+    CT_GENERATE_PARAMETERS("_U1_/lena", ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ADD_TYPE_U1, ARG, erode3x3_read_image, "lena.bmp")
 
 TEST_WITH_ARG(Erode3x3, testGraphProcessing, Arg,
     PARAMETERS
@@ -233,7 +357,7 @@ TEST_WITH_ARG(Erode3x3, testGraphProcessing, Arg,
     CT_Image src = NULL, dst = NULL;
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height));
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
 
     ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
 
@@ -275,7 +399,7 @@ TEST_WITH_ARG(Erode3x3, testImmediateProcessing, Arg,
     CT_Image src = NULL, dst = NULL;
     vx_border_t border = arg_->border;
 
-    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height));
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
 
     ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
 
@@ -296,4 +420,60 @@ TEST_WITH_ARG(Erode3x3, testImmediateProcessing, Arg,
     ASSERT(src_image == 0);
 }
 
-TESTCASE_TESTS(Erode3x3, testNodeCreation, testGraphProcessing, testImmediateProcessing)
+typedef struct {
+    const char* testName;
+    CT_Image (*generator)(const char* fileName, int width, int height, vx_df_image format);
+    const char* fileName;
+    vx_border_t border;
+    int width, height;
+    vx_df_image format;
+    vx_rectangle_t regionShift;
+} ValidRegionTest_Arg;
+
+#ifdef PARAMETERS
+#undef PARAMETERS
+#endif
+#define PARAMETERS \
+    CT_GENERATE_PARAMETERS("lena", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ADD_TYPE_U8, ADD_VALID_REGION_SHRINKS, ARG, erode3x3_read_image, "lena.bmp"), \
+    CT_GENERATE_PARAMETERS("_U1_/lena", ADD_VX_BORDERS_U1_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ADD_TYPE_U1, ADD_VALID_REGION_SHRINKS, ARG, erode3x3_read_image, "lena.bmp")
+
+TEST_WITH_ARG(Erode3x3, testWithValidRegion, ValidRegionTest_Arg,
+    PARAMETERS
+)
+{
+    vx_context context = context_->vx_context_;
+    vx_image src_image = 0, dst_image = 0;
+
+    CT_Image src = NULL, dst = NULL;
+    vx_border_t border = arg_->border;
+    vx_rectangle_t rect = {0, 0, 0, 0}, rect_shft = arg_->regionShift;
+
+    ASSERT_NO_FAILURE(src = arg_->generator(arg_->fileName, arg_->width, arg_->height, arg_->format));
+
+    ASSERT_VX_OBJECT(src_image = ct_image_to_vx_image(src, context), VX_TYPE_IMAGE);
+    ASSERT_VX_OBJECT(dst_image = ct_create_similar_image(src_image), VX_TYPE_IMAGE);
+
+    ASSERT_NO_FAILURE(vxGetValidRegionImage(src_image, &rect));
+    ALTERRECTANGLE(rect, rect_shft.start_x, rect_shft.start_y, rect_shft.end_x, rect_shft.end_y);
+    ASSERT_NO_FAILURE(vxSetImageValidRectangle(src_image, &rect));
+
+    VX_CALL(vxSetContextAttribute(context, VX_CONTEXT_IMMEDIATE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxuErode3x3(context, src_image, dst_image));
+
+    ASSERT_NO_FAILURE(dst = ct_image_from_vx_image(dst_image));
+    ASSERT_NO_FAILURE(ct_adjust_roi(dst, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+
+    ASSERT_NO_FAILURE(ct_adjust_roi(src, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+    ASSERT_NO_FAILURE(erode3x3_check(src, dst, border));
+
+    VX_CALL(vxReleaseImage(&dst_image));
+    VX_CALL(vxReleaseImage(&src_image));
+
+    ASSERT(dst_image == 0);
+    ASSERT(src_image == 0);
+}
+
+TESTCASE_TESTS(Erode3x3, testNodeCreation, testGraphProcessing, testImmediateProcessing, testWithValidRegion)
+
+#endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

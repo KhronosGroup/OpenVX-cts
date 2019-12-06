@@ -11,7 +11,8 @@
 //small helper function to represent uint32_t value as float32
 float asfloat(uint32_t v)
 {
-    return *(float*)&v;
+    unsigned long value = (unsigned long)(void *)&v;
+    return *(float*)value;
 }
 
 
@@ -85,7 +86,7 @@ uint16_t FP32ToFP16(float x)
     return v.u | s;
 }
 
-/** @brief Converts FP16 to FP32 
+/** @brief Converts FP16 to FP32
 *  @param x - value in FP16 format
 *  @return value in FP32 format
 **************************************************************/
@@ -135,7 +136,7 @@ float FP16ToFP32(uint16_t x)
     return asfloat(u);
 }
 
-/** @brief Converts S16 (signed int16) to a float 
+/** @brief Converts S16 (signed int16) to a float
 *  @param s16Pixel - A pointer to a value in S16 format.
 *  @return float value
 ***************************************************************/
@@ -145,7 +146,7 @@ float S16ToFloat(const char* s16Pixel)
     return (float)value;
 }
 
-/** @brief Converts Q78 to a float 
+/** @brief Converts Q78 to a float
 *  @param q78Pixel - A pointer to a value in Q78 format.
 *  @return float value
 **************************************************************/
@@ -155,7 +156,7 @@ float Q78ToFloat(const char* q78Pixel)
     return ((float)value) / 256.0;
 }
 
-/** @brief Converts FP16 to a float 
+/** @brief Converts FP16 to a float
 *  @param fp16Pixel - A pointer to a value in FP16 format.
 *  @return float value
 **************************************************************/
