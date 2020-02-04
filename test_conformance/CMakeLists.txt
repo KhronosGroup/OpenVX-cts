@@ -1,4 +1,4 @@
-# 
+#
 
 # Copyright (c) 2012-2017 The Khronos Group Inc.
 #
@@ -21,7 +21,10 @@ set(target vx_test_conformance)
 
 file(GLOB SOURCES "./*.c")
 file(GLOB HEADERS "./*.h")
+
+if(OPENVX_USE_NN_16)
 file(GLOB NETWORK_SOURCES "./Networks/src/*")
+endif(OPENVX_USE_NN_16)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 

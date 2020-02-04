@@ -919,14 +919,24 @@ int CT_main(int argc, char* argv[], const char* version_str)
                     if (strncmp(enhanced_vision_test[i], test_name, sizeof(enhanced_vision_test[i]) - 1) == 0) {
                         conformance_enhanced_vision_status = 1;
                         i = enhance_vision_num;
-            }
-        }
+                    }
+                }
 #endif
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
 #ifdef OPENVX_USE_NN
                 if (strncmp("TensorNN", test_name, sizeof("TensorNN") - 1) == 0) {
                     total_openvx_failed_nn_tests ++;
+                    total_openvx_failed_neural_networks_tests ++;
                 }
                 else
+#endif
+#ifdef OPENVX_USE_NN_16
+                if (strncmp("TensorNetworks", test_name, sizeof("TensorNetworks") - 1) == 0) {
+                    total_openvx_failed_nn_tests ++;
+                    total_openvx_failed_neural_networks_tests ++;
+                }
+                else
+#endif
 #endif
 #ifdef OPENVX_USE_IX
                 if (strncmp("ExtensionObject", test_name, sizeof("ExtensionObject") - 1) == 0) {
@@ -957,20 +967,6 @@ int CT_main(int argc, char* argv[], const char* version_str)
                     total_openvx_failed_vision_tests ++;
                 }
                 else
-#endif
-#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
-#ifdef OPENVX_USE_NN
-                if (strncmp("TensorNN", test_name, sizeof("TensorNN") - 1) == 0) {
-                    total_openvx_failed_neural_networks_tests ++;
-                }
-                else
-#endif
-#ifdef OPENVX_USE_NN_16
-                if (strncmp("TensorNetworks", test_name, sizeof("TensorNetworks") - 1) == 0) {
-                    total_openvx_failed_neural_networks_tests ++;
-                }
-                else
-#endif
 #endif
 #ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
                 if (strncmp("TensorNNEFImport", test_name, sizeof("TensorNNEFImport") - 1) == 0) {

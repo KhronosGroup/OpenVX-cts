@@ -1,4 +1,4 @@
-# 
+#
 
 # Copyright (c) 2012-2017 The Khronos Group Inc.
 #
@@ -21,6 +21,9 @@ project(test_engine C)
 set(target test_engine)
 file(GLOB SOURCES "./*.c")
 file(GLOB HEADERS "./*.h")
+
+# Following is added for accessing prototype of usleep() in unistd.h
+add_definitions( -D_XOPEN_SOURCE=700 -D_GNU_SOURCE=1 )
 
 add_library(${target} STATIC ${SOURCES} ${HEADERS})
 target_include_directories(${target} PUBLIC ${CMAKE_SOURCE_DIR})

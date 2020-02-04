@@ -1,7 +1,9 @@
 /** @file common.c
- *  @brief 
- *  This file contains the implementation of the generated utility functions 
+ *  @brief
+ *  This file contains the implementation of the generated utility functions
  */
+#ifdef OPENVX_CONFORMANCE_NEURAL_NETWORKS
+#ifdef OPENVX_USE_NN_16
 
 #include "common.h"
 #include <stdio.h>
@@ -23,12 +25,15 @@ void ReleaseObjects(ObjectRefContainerType* pObjectContainer)
 
             if(pObj->ref)
             {
-                if(pObj->type == VX_TYPE_IMAGE)
+                if(pObj->type == VX_TYPE_TENSOR)
+                    vxReleaseTensor((vx_tensor*)&(pObj->ref));
+                else if(pObj->type == VX_TYPE_SCALAR)
+                    vxReleaseScalar((vx_scalar*)&(pObj->ref));
+#if defined OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION
+                else if(pObj->type == VX_TYPE_IMAGE)
                     vxReleaseImage((vx_image*)&(pObj->ref));
                 else if(pObj->type == VX_TYPE_ARRAY)
                     vxReleaseArray((vx_array*)&(pObj->ref));
-                else if(pObj->type == VX_TYPE_SCALAR)
-                    vxReleaseScalar((vx_scalar*)&(pObj->ref));
                 else if(pObj->type == VX_TYPE_REMAP)
                     vxReleaseRemap((vx_remap*)&(pObj->ref));
                 else if(pObj->type == VX_TYPE_CONVOLUTION)
@@ -45,10 +50,9 @@ void ReleaseObjects(ObjectRefContainerType* pObjectContainer)
                     vxReleaseLUT((vx_lut*)&(pObj->ref));
                 else if(pObj->type == VX_TYPE_OBJECT_ARRAY)
                     vxReleaseObjectArray((vx_object_array*)&(pObj->ref));
-				else if(pObj->type == VX_TYPE_TENSOR)
-                    vxReleaseTensor((vx_tensor*)&(pObj->ref));
                 else if(pObj->type == VX_TYPE_DELAY)
                     vxReleaseDelay((vx_delay*)&(pObj->ref));
+#endif
             }
             else if(pObj->pMem)
             {
@@ -156,7 +160,7 @@ vx_status CreateNode(vx_graph graph, vx_kernel kernel, ObjectRefContainerType* p
         {
             if(0 == strcmp(nodeName, filteredNodesList[i]))
             {
-                bCreateNode = true;                
+                bCreateNode = true;
                 break;
             }
         }
@@ -173,12 +177,12 @@ vx_status CreateNode(vx_graph graph, vx_kernel kernel, ObjectRefContainerType* p
             return status;
         }
         AddVXObject(pObjectContainer, (vx_reference)*node, VX_TYPE_NODE, nodeName);
-    }    
+    }
     else
     {
         *node = NULL;
     }
-    return VX_SUCCESS;    
+    return VX_SUCCESS;
 }
 
 int WriteLog(const char* format, ...)
@@ -196,9 +200,9 @@ char** getAllVxStatusEnums()
 {
     static char allVxStatusEnumsContainer[1024];
     static char* statusArray[VX_SUCCESS - VX_STATUS_MIN + 1];
-	static bool firstTime = true;
-	if (firstTime)
-	{
+    static bool firstTime = true;
+    if (firstTime)
+    {
         size_t index = 0;
         for (int i = VX_STATUS_MIN; i <= VX_SUCCESS; ++i)
         {
@@ -209,7 +213,7 @@ char** getAllVxStatusEnums()
             else if (i == VX_ERROR_INVALID_SCOPE) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_SCOPE");
             else if (i == VX_ERROR_INVALID_NODE) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_NODE");
             else if (i == VX_ERROR_INVALID_GRAPH) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_GRAPH");
-		    else if (i == VX_ERROR_INVALID_TYPE) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_TYPE");
+            else if (i == VX_ERROR_INVALID_TYPE) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_TYPE");
             else if (i == VX_ERROR_INVALID_VALUE) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_VALUE");
             else if (i == VX_ERROR_INVALID_DIMENSION) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_DIMENSION");
             else if (i == VX_ERROR_INVALID_FORMAT) strcpy(allVxStatusEnumsContainer + index, "VX_ERROR_INVALID_FORMAT");
@@ -230,8 +234,8 @@ char** getAllVxStatusEnums()
             else strcpy(allVxStatusEnumsContainer + index, "Unknown error");
             statusArray[i - VX_STATUS_MIN] = allVxStatusEnumsContainer + index;
             index += strlen(allVxStatusEnumsContainer + index) + 1;
-	    }
-		firstTime = false;
+        }
+        firstTime = false;
     }
     return statusArray;
 }
@@ -247,3 +251,6 @@ const char* getVxStatusDesc(int vxStatus)
     }
     return statusContainer[vxStatus - VX_STATUS_MIN];
 }
+
+#endif
+#endif
