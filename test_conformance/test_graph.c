@@ -869,7 +869,7 @@ TEST_WITH_ARG(Graph, testKernelName, kernel_name_arg,
     ARG("org.khronos.openvx.optical_flow_pyr_lk",   VX_KERNEL_OPTICAL_FLOW_PYR_LK),
     ARG("org.khronos.openvx.remap",                 VX_KERNEL_REMAP),
     ARG("org.khronos.openvx.halfscale_gaussian",    VX_KERNEL_HALFSCALE_GAUSSIAN),
-    ARG("org.khronos.openvx.weightedaverage",       VX_KERNEL_WEIGHTED_AVERAGE),
+    ARG("org.khronos.openvx.weighted_average",      VX_KERNEL_WEIGHTED_AVERAGE),
     ARG("org.khronos.openvx.non_linear_filter",     VX_KERNEL_NON_LINEAR_FILTER),
     ARG("org.khronos.openvx.laplacian_pyramid",     VX_KERNEL_LAPLACIAN_PYRAMID),
     ARG("org.khronos.openvx.laplacian_reconstruct", VX_KERNEL_LAPLACIAN_RECONSTRUCT),
@@ -2812,7 +2812,7 @@ TEST(GraphBase, testvxScheduleGraph)
 
     graph = vxCreateGraph(context);
     status = vxScheduleGraph(graph);
-    ASSERT_EQ_INT(VX_SUCCESS, status);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_GRAPH, status);
 
     VX_CALL(vxReleaseGraph(&graph));
 }
@@ -2919,20 +2919,20 @@ TEST_WITH_ARG(GraphEnhanced, testKernelName_enhanced, kernel_name_arg,
     ARG("org.khronos.openvx.max",                        VX_KERNEL_MAX),
     ARG("org.khronos.openvx.match_template",             VX_KERNEL_MATCH_TEMPLATE),
     ARG("org.khronos.openvx.lbp",                        VX_KERNEL_LBP),
-    ARG("org.khronos.openvx.hough_lines_probabilistic",  VX_KERNEL_HOUGH_LINES_P),
+    ARG("org.khronos.openvx.hough_lines_p",              VX_KERNEL_HOUGH_LINES_P),
     ARG("org.khronos.openvx.tensor_multiply",            VX_KERNEL_TENSOR_MULTIPLY),
     ARG("org.khronos.openvx.tensor_add",                 VX_KERNEL_TENSOR_ADD),
     ARG("org.khronos.openvx.tensor_subtract",            VX_KERNEL_TENSOR_SUBTRACT),
     ARG("org.khronos.openvx.tensor_table_lookup",        VX_KERNEL_TENSOR_TABLE_LOOKUP),
     ARG("org.khronos.openvx.tensor_transpose",           VX_KERNEL_TENSOR_TRANSPOSE),
     ARG("org.khronos.openvx.tensor_convert_depth",       VX_KERNEL_TENSOR_CONVERT_DEPTH),
-    ARG("org.khronos.openvx.tensor_matrix_multiply ",    VX_KERNEL_TENSOR_MATRIX_MULTIPLY),
-    ARG("org.khronos.openvx.copy_node",                  VX_KERNEL_COPY),
-    ARG("org.khronos.openvx.nonmaxsuppression",          VX_KERNEL_NON_MAX_SUPPRESSION),
+    ARG("org.khronos.openvx.tensor_matrix_multiply",     VX_KERNEL_TENSOR_MATRIX_MULTIPLY),
+    ARG("org.khronos.openvx.copy",                       VX_KERNEL_COPY),
+    ARG("org.khronos.openvx.non_max_suppression",        VX_KERNEL_NON_MAX_SUPPRESSION),
     ARG("org.khronos.openvx.scalar_operation",           VX_KERNEL_SCALAR_OPERATION),
-    ARG("org.khronos.openvx.hogfeatures",                VX_KERNEL_HOG_FEATURES),
+    ARG("org.khronos.openvx.hog_features",               VX_KERNEL_HOG_FEATURES),
     ARG("org.khronos.openvx.hog_cells",                  VX_KERNEL_HOG_CELLS),
-    ARG("org.khronos.openvx.bilateral_filter ",          VX_KERNEL_BILATERAL_FILTER),
+    ARG("org.khronos.openvx.bilateral_filter",           VX_KERNEL_BILATERAL_FILTER),
     ARG("org.khronos.openvx.select",                     VX_KERNEL_SELECT),
     )
 {

@@ -1,6 +1,6 @@
 #include "precisionConverter.h"
 #include <limits.h>
-#include <memory.h>
+#include <string.h>
 
 
 // F32: exp_bias:127 SEEEEEEE EMMMMMMM MMMMMMMM MMMMMMMM.
