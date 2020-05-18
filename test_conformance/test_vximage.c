@@ -381,171 +381,50 @@ TEST_WITH_ARG(Image, testSwapImageHandle, ImageGenerator_Arg,
 
     if (arg_->have_roi == vx_true_e)
     {
-        vx_image roi1 = 0;
-        vx_image roi2 = 0;
-        vx_uint32 roi1_width;
-        vx_uint32 roi1_height;
-
-        vx_rectangle_t roi1_rect =
+        if(!(arg_->format == VX_DF_IMAGE_U1 && arg_->width <= 16))
         {
-            /* U1 subimages must start on byte boundary */
-            (vx_uint32)(arg_->format == VX_DF_IMAGE_U1 ? ((arg_->width / 2 + 7) / 8) * 8 : arg_->width / 2),
-            (vx_uint32)arg_->height / 2,
-            (vx_uint32)arg_->width,
-            (vx_uint32)arg_->height
-        };
+            vx_image roi1 = 0;
+            vx_image roi2 = 0;
+            vx_uint32 roi1_width;
+            vx_uint32 roi1_height;
 
-        vx_rectangle_t roi2_rect;
-
-        /* first level subimage */
-        ASSERT_VX_OBJECT(roi1 = vxCreateImageFromROI(image1, &roi1_rect), VX_TYPE_IMAGE);
-
-        VX_CALL(vxQueryImage(roi1, VX_IMAGE_WIDTH, &roi1_width, sizeof(vx_uint32)));
-        VX_CALL(vxQueryImage(roi1, VX_IMAGE_HEIGHT, &roi1_height, sizeof(vx_uint32)));
-
-        roi2_rect.start_x = arg_->format == VX_DF_IMAGE_U1 ? ((roi1_width / 2 + 7) / 8 ) * 8 : roi1_width / 2;
-        roi2_rect.start_y = roi1_height / 2;
-        roi2_rect.end_x   = roi1_width;
-        roi2_rect.end_y   = roi1_height;
-
-        /* second level subimage */
-        ASSERT_VX_OBJECT(roi2 = vxCreateImageFromROI(roi1, &roi2_rect), VX_TYPE_IMAGE);
-
-        /* try to get back ROI pointers */
-        ASSERT_NE_VX_STATUS(VX_SUCCESS, vxSwapImageHandle(roi2, NULL, prev_ptrs, nplanes1));
-
-        /* try to replace and get back ROI pointers */
-        ASSERT_NE_VX_STATUS(VX_SUCCESS, vxSwapImageHandle(roi2, mem2_ptrs, prev_ptrs, nplanes1));
-
-        /* check the content of roi2 image equal image1 */
-        for (n = 0; n < nplanes1; n++)
-        {
-            unsigned int i;
-            unsigned int j;
-            vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
-
-            vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
-
-            vx_map_id map_id;
-
-            void* plane_ptr = 0;
-
-            VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
-            VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
-            for (i = 0; i < addr.dim_y; i += addr.step_y)
+            vx_rectangle_t roi1_rect =
             {
-                for (j = 0; j < addr.dim_x; j += addr.step_x)
-                {
-                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
-                    if (p[0] != val1.reserved[n])
-                        CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val1, p[0]);
-                }
-            }
-            VX_CALL(vxUnmapImagePatch(roi2, map_id));
-        }
+                /* U1 subimages must start on byte boundary */
+                (vx_uint32)(arg_->format == VX_DF_IMAGE_U1 ? ((arg_->width / 2 + 7) / 8) * 8 : arg_->width / 2),
+                (vx_uint32)arg_->height / 2,
+                (vx_uint32)arg_->width,
+                (vx_uint32)arg_->height
+            };
 
-        /* replace image pointers */
-        VX_CALL(vxSwapImageHandle(image1, mem2_ptrs, NULL, nplanes1));
+            vx_rectangle_t roi2_rect;
 
-        /* check the content of roi2 image equal image2 */
-        for (n = 0; n < nplanes1; n++)
-        {
-            unsigned int i;
-            unsigned int j;
-            vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
+            /* first level subimage */
+            ASSERT_VX_OBJECT(roi1 = vxCreateImageFromROI(image1, &roi1_rect), VX_TYPE_IMAGE);
 
-            vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
+            VX_CALL(vxQueryImage(roi1, VX_IMAGE_WIDTH, &roi1_width, sizeof(vx_uint32)));
+            VX_CALL(vxQueryImage(roi1, VX_IMAGE_HEIGHT, &roi1_height, sizeof(vx_uint32)));
 
-            vx_map_id map_id;
+            roi2_rect.start_x = arg_->format == VX_DF_IMAGE_U1 ? ((roi1_width / 2 + 7) / 8 ) * 8 : roi1_width / 2;
+            roi2_rect.start_y = roi1_height / 2;
+            roi2_rect.end_x   = roi1_width;
+            roi2_rect.end_y   = roi1_height;
 
-            void* plane_ptr = 0;
+            /* second level subimage */
+            ASSERT_VX_OBJECT(roi2 = vxCreateImageFromROI(roi1, &roi2_rect), VX_TYPE_IMAGE);
 
-            VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
-            VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
-            for (i = 0; i < addr.dim_y; i += addr.step_y)
+            /* try to get back ROI pointers */
+            ASSERT_NE_VX_STATUS(VX_SUCCESS, vxSwapImageHandle(roi2, NULL, prev_ptrs, nplanes1));
+
+            /* try to replace and get back ROI pointers */
+            ASSERT_NE_VX_STATUS(VX_SUCCESS, vxSwapImageHandle(roi2, mem2_ptrs, prev_ptrs, nplanes1));
+
+            /* check the content of roi2 image equal image1 */
+            for (n = 0; n < nplanes1; n++)
             {
-                for (j = 0; j < addr.dim_x; j += addr.step_x)
-                {
-                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
-                    if (p[0] != val2.reserved[n])
-                        CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val2, p[0]);
-                }
-            }
-            VX_CALL(vxUnmapImagePatch(roi2, map_id));
-        }
-
-        /* modify the content of roi2 */
-        for (n = 0; n < nplanes1; n++)
-        {
-            unsigned int i;
-            unsigned int j;
-            vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
-
-            vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
-
-            vx_map_id map_id;
-
-            void* plane_ptr = 0;
-
-            VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
-            VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_AND_WRITE, VX_MEMORY_TYPE_HOST, 0));
-            for (i = 0; i < addr.dim_y; i += addr.step_y)
-            {
-                for (j = 0; j < addr.dim_x; j += addr.step_x)
-                {
-                    unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
-                    *p = val3.reserved[n];
-                }
-            }
-            VX_CALL(vxUnmapImagePatch(roi2, map_id));
-        }
-
-        /* reclaim image ptrs */
-        VX_CALL(vxSwapImageHandle(image1, NULL, prev_ptrs, nplanes1));
-
-        /* check that the reclaimed host memory contains the correct data */
-        for (n = 0; n < nplanes2; n++)
-        {
-            vx_uint8* plane_ptr = (vx_uint8*)prev_ptrs[n];
-            vx_uint32 i;
-            vx_uint32 j;
-            vx_uint32 subsampling_x = own_plane_subsampling_x(arg_->format, n);
-            vx_uint32 subsampling_y = own_plane_subsampling_y(arg_->format, n);
-            vx_uint32 start_x = (roi1_rect.start_x + roi2_rect.start_x) / subsampling_x;
-            vx_uint32 start_y = (roi1_rect.start_y + roi2_rect.start_y) / subsampling_y;
-            vx_uint32 end_x   = (vx_uint32)(arg_->width  / subsampling_x);
-            vx_uint32 end_y   = (vx_uint32)(arg_->height / subsampling_y);
-
-            for (i = 0; i < addr2[n].dim_y; i++)
-            {
-                for (j = 0; j < addr2[n].dim_x; j++)
-                {
-                    unsigned int k = i * addr2[n].stride_y;
-                    k += (addr2[n].stride_x == 0) ? (j * addr2[n].stride_x_bits) / 8 : j * addr2[n].stride_x;
-
-                    unsigned char p = plane_ptr[k];
-
-                    if (i >= start_y && i <= end_y - 1 &&
-                        j >= start_x && j <= end_x - 1)
-                    {
-                        if (p != val3.reserved[n])
-                            CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val3, p);
-                    }
-                    else
-                    {
-                        if (p != val2.reserved[n])
-                            CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val2, p);
-                    }
-                }
-            }
-        }
-
-        /* check that pointers are reclaimed in ROI */
-        for (n = 0; n < nplanes1; n++)
-        {
-            if (prev_ptrs[n] != NULL)
-            {
-                vx_rectangle_t rect = { 0, 0, 0, 0 };
+                unsigned int i;
+                unsigned int j;
+                vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
 
                 vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
 
@@ -553,24 +432,148 @@ TEST_WITH_ARG(Image, testSwapImageHandle, ImageGenerator_Arg,
 
                 void* plane_ptr = 0;
 
-                vx_uint8* ptr = (vx_uint8*)prev_ptrs[n];
-
-                EXPECT_EQ_PTR(mem2_ptrs[n], ptr);
-
-                ct_free_mem(ptr);
-                prev_ptrs[n] = NULL;
-                mem2_ptrs[n] = NULL;
-
-                VX_CALL(vxGetValidRegionImage(roi2, &rect));
-
-                EXPECT_EQ_INT(VX_ERROR_NO_MEMORY, vxMapImagePatch(roi2, &rect, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+                VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
+                VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+                for (i = 0; i < addr.dim_y; i += addr.step_y)
+                {
+                    for (j = 0; j < addr.dim_x; j += addr.step_x)
+                    {
+                        unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                        if (p[0] != val1.reserved[n])
+                            CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val1, p[0]);
+                    }
+                }
+                VX_CALL(vxUnmapImagePatch(roi2, map_id));
             }
-        }
 
-        VX_CALL(vxReleaseImage(&roi1));
-        VX_CALL(vxReleaseImage(&roi2));
-        ASSERT(roi1 == 0);
-        ASSERT(roi2 == 0);
+            /* replace image pointers */
+            VX_CALL(vxSwapImageHandle(image1, mem2_ptrs, NULL, nplanes1));
+
+            /* check the content of roi2 image equal image2 */
+            for (n = 0; n < nplanes1; n++)
+            {
+                unsigned int i;
+                unsigned int j;
+                vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
+
+                vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
+
+                vx_map_id map_id;
+
+                void* plane_ptr = 0;
+
+                VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
+                VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+                for (i = 0; i < addr.dim_y; i += addr.step_y)
+                {
+                    for (j = 0; j < addr.dim_x; j += addr.step_x)
+                    {
+                        unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                        if (p[0] != val2.reserved[n])
+                            CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val2, p[0]);
+                    }
+                }
+                VX_CALL(vxUnmapImagePatch(roi2, map_id));
+            }
+
+            /* modify the content of roi2 */
+            for (n = 0; n < nplanes1; n++)
+            {
+                unsigned int i;
+                unsigned int j;
+                vx_rectangle_t rect_roi2 = { 0, 0, 0, 0 };
+
+                vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
+
+                vx_map_id map_id;
+
+                void* plane_ptr = 0;
+
+                VX_CALL(vxGetValidRegionImage(roi2, &rect_roi2));
+                VX_CALL(vxMapImagePatch(roi2, &rect_roi2, n, &map_id, &addr, &plane_ptr, VX_READ_AND_WRITE, VX_MEMORY_TYPE_HOST, 0));
+                for (i = 0; i < addr.dim_y; i += addr.step_y)
+                {
+                    for (j = 0; j < addr.dim_x; j += addr.step_x)
+                    {
+                        unsigned char* p = (unsigned char*)vxFormatImagePatchAddress2d(plane_ptr, j, i, &addr);
+                        *p = val3.reserved[n];
+                    }
+                }
+                VX_CALL(vxUnmapImagePatch(roi2, map_id));
+            }
+
+            /* reclaim image ptrs */
+            VX_CALL(vxSwapImageHandle(image1, NULL, prev_ptrs, nplanes1));
+
+            /* check that the reclaimed host memory contains the correct data */
+            for (n = 0; n < nplanes2; n++)
+            {
+                vx_uint8* plane_ptr = (vx_uint8*)prev_ptrs[n];
+                vx_uint32 i;
+                vx_uint32 j;
+                vx_uint32 subsampling_x = own_plane_subsampling_x(arg_->format, n);
+                vx_uint32 subsampling_y = own_plane_subsampling_y(arg_->format, n);
+                vx_uint32 start_x = (roi1_rect.start_x + roi2_rect.start_x) / subsampling_x;
+                vx_uint32 start_y = (roi1_rect.start_y + roi2_rect.start_y) / subsampling_y;
+                vx_uint32 end_x   = (vx_uint32)(arg_->width  / subsampling_x);
+                vx_uint32 end_y   = (vx_uint32)(arg_->height / subsampling_y);
+
+                for (i = 0; i < addr2[n].dim_y; i++)
+                {
+                    for (j = 0; j < addr2[n].dim_x; j++)
+                    {
+                        unsigned int k = i * addr2[n].stride_y;
+                        k += (addr2[n].stride_x == 0) ? (j * addr2[n].stride_x_bits) / 8 : j * addr2[n].stride_x;
+
+                        unsigned char p = plane_ptr[k];
+
+                        if (i >= start_y && i <= end_y - 1 &&
+                            j >= start_x && j <= end_x - 1)
+                        {
+                            if (p != val3.reserved[n])
+                                CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val3, p);
+                        }
+                        else
+                        {
+                            if (p != val2.reserved[n])
+                                CT_FAIL("ROI content mismath at [x=%d, y=%d]: expected %d, actual %d", j, i, val2, p);
+                        }
+                    }
+                }
+            }
+
+            /* check that pointers are reclaimed in ROI */
+            for (n = 0; n < nplanes1; n++)
+            {
+                if (prev_ptrs[n] != NULL)
+                {
+                    vx_rectangle_t rect = { 0, 0, 0, 0 };
+
+                    vx_imagepatch_addressing_t addr = VX_IMAGEPATCH_ADDR_INIT;
+
+                    vx_map_id map_id;
+
+                    void* plane_ptr = 0;
+
+                    vx_uint8* ptr = (vx_uint8*)prev_ptrs[n];
+
+                    EXPECT_EQ_PTR(mem2_ptrs[n], ptr);
+
+                    ct_free_mem(ptr);
+                    prev_ptrs[n] = NULL;
+                    mem2_ptrs[n] = NULL;
+
+                    VX_CALL(vxGetValidRegionImage(roi2, &rect));
+
+                    EXPECT_EQ_INT(VX_ERROR_NO_MEMORY, vxMapImagePatch(roi2, &rect, n, &map_id, &addr, &plane_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0));
+                }
+            }
+
+            VX_CALL(vxReleaseImage(&roi1));
+            VX_CALL(vxReleaseImage(&roi2));
+            ASSERT(roi1 == 0);
+            ASSERT(roi2 == 0);
+        }
     }
     else
     {
