@@ -41,6 +41,7 @@
 #define TEST_TENSOR_MAX_DIM_SZ                  20
 
 #define Q78_FIXED_POINT_POSITION 8
+#define MIN_TENSOR_DIMS 2
 #define MAX_TENSOR_DIMS 3
 
 #define MIN(a, b)   ((a) < (b) ? (a) : (b))
@@ -106,7 +107,7 @@ static void getMinMax(const void* src, const vx_size* src_strides, const vx_size
 {
     vx_int16 maxVal = INT16_MIN;
     vx_int16 minVal = INT16_MAX;
-    if (num_of_dims == 2)
+    if (num_of_dims == MIN_TENSOR_DIMS)
     {
         for (vx_uint32 y = 0; y < dims[1]; y++)
         {
@@ -127,7 +128,7 @@ static void getMinMax(const void* src, const vx_size* src_strides, const vx_size
         *max_value = maxVal;
         *min_value = minVal;
     }
-    else if (num_of_dims == 3)
+    else if (num_of_dims == MAX_TENSOR_DIMS)
     {
         for (vx_uint32 y = 0; y < dims[2]; y++)
         {
@@ -260,7 +261,7 @@ static void ownCheckBilateralFilterResult(
         getMinMax(in_ptr, in_strides, in_dims, dim_num, &maxVal, &minVal);
         if ((vx_float32)(abs(maxVal - minVal)) < FLT_EPSILON)
         {
-            if (dim_num == 2)
+            if (dim_num == MIN_TENSOR_DIMS)
             {
                 for (y = low_y; y < high_y; y++)
                 {
@@ -279,7 +280,7 @@ static void ownCheckBilateralFilterResult(
                 ASSERT(tolerance >= MIN_TOLERANCE);
                 return;
             }
-            else if (dim_num == 3)
+            else if (dim_num == MAX_TENSOR_DIMS)
             {
                 for (y = low_y; y < high_y; y++)
                 {
@@ -354,7 +355,7 @@ static void ownCheckBilateralFilterResult(
         releaseRes(space_weight);
     }
 
-    if (dim_num == 2)
+    if (dim_num == MIN_TENSOR_DIMS)
     {
         for (y = low_y; y < high_y; y++)
         {
@@ -464,7 +465,7 @@ static void ownCheckBilateralFilterResult(
             }
         }
     }
-    else if (dim_num == 3)
+    else if (dim_num == MAX_TENSOR_DIMS)
     {
         for (y = low_y; y < high_y; y++)
         {
@@ -716,9 +717,9 @@ TEST_WITH_ARG(BilateralFilter, testGraphProcessing, bilateral_arg,
     ownUnpackFormat(src_fmt, &src_data_type, &src_fixed_point_position, &src_sizeof_data_type);
     ownUnpackFormat(dst_fmt, &dst_data_type, &dst_fixed_point_position, &dst_sizeof_data_type);
 
-    if (cn == 3)
+    if (cn == MAX_TENSOR_DIMS)
     {
-        num_of_dims = 3;
+        num_of_dims = MAX_TENSOR_DIMS;
     }
 
     size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * num_of_dims);
@@ -726,9 +727,9 @@ TEST_WITH_ARG(BilateralFilter, testGraphProcessing, bilateral_arg,
     size_t * const dst_tensor_strides = ct_alloc_mem(sizeof(*dst_tensor_strides) * num_of_dims);
     ASSERT(tensor_dims && src_tensor_strides && dst_tensor_strides);
 
-    if (num_of_dims == 3)
+    if (num_of_dims == MAX_TENSOR_DIMS)
     {
-        tensor_dims[0] = 3;
+        tensor_dims[0] = 1;
         tensor_dims[1] = width;
         tensor_dims[2] = height;
 
@@ -821,7 +822,7 @@ TEST_WITH_ARG(BilateralFilter, testImmediateProcessing, bilateral_arg,
     const int cn = arg_->cn;
     const int width = arg_->width;
     const int height = arg_->height;
-    vx_size num_of_dims = 2;
+    vx_size num_of_dims = MIN_TENSOR_DIMS;
 
     vx_enum src_data_type = 0;
     vx_enum dst_data_type = 0;
@@ -832,9 +833,9 @@ TEST_WITH_ARG(BilateralFilter, testImmediateProcessing, bilateral_arg,
     ownUnpackFormat(src_fmt, &src_data_type, &src_fixed_point_position, &src_sizeof_data_type);
     ownUnpackFormat(dst_fmt, &dst_data_type, &dst_fixed_point_position, &dst_sizeof_data_type);
 
-    if (cn == 3)
+    if (cn == MAX_TENSOR_DIMS)
     {
-        num_of_dims = 3;
+        num_of_dims = MAX_TENSOR_DIMS;
     }
 
     size_t * const tensor_dims = ct_alloc_mem(sizeof(*tensor_dims) * num_of_dims);
@@ -842,9 +843,9 @@ TEST_WITH_ARG(BilateralFilter, testImmediateProcessing, bilateral_arg,
     size_t * const dst_tensor_strides = ct_alloc_mem(sizeof(*dst_tensor_strides) * num_of_dims);
     ASSERT(tensor_dims && src_tensor_strides && dst_tensor_strides);
 
-    if (num_of_dims == 3)
+    if (num_of_dims == MAX_TENSOR_DIMS)
     {
-        tensor_dims[0] = 3;
+        tensor_dims[0] = 1;
         tensor_dims[1] = width;
         tensor_dims[2] = height;
 
@@ -962,7 +963,14 @@ TEST(BilateralFilter, testNodeCreation)
 
         for (vx_size i = 0; i < dims; ++i)
         {
-            tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ+1);
+            if (dims == MAX_TENSOR_DIMS && i == 0)
+            {
+                tensor_dims[i] = 1;
+            }
+            else
+            {
+                tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, TEST_TENSOR_MIN_DIM_SZ, TEST_TENSOR_MAX_DIM_SZ + 1);
+            }
 
             src_tensor_strides[i] = i ? src_tensor_strides[i-1] * tensor_dims[i-1] : src_sizeof_data_type;
             dst_tensor_strides[i] = i ? dst_tensor_strides[i-1] * tensor_dims[i-1] : dst_sizeof_data_type;
