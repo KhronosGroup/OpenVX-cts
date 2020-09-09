@@ -252,6 +252,77 @@ void CT_CollectGarbage(int type)
     bb->gc_chain_ = stub.next_;
 }
 
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+
+#if defined __linux__
+#include "dirent.h"
+#endif
+
+// sort the folder by alphabet
+static int cmp(const void *a, const void *b)
+{
+    char *s1 = (char *)a;
+    char *s2 = (char *)b;
+    return strcmp(s1, s2);
+}
+
+// list all the folder nams in file_path
+int CT_ListFolder(int max_file, char *file_path, char file_names[MAX_NNEF_KERNELS][MAXPATHLENGTH])
+{
+    int i = 0, file_num = 0;
+
+#if defined(_WIN32)
+    strcat(file_path, "*.*");
+
+    // Get file number and names
+    HANDLE h;
+    WIN32_FIND_DATA find_data;
+    h = FindFirstFile(file_path, &find_data);
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if (i >= max_file)
+                break;
+            // ignore"."
+            if (find_data.cFileName[0] == '.')
+                continue;
+            if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)    // whether content or not
+                memcpy(file_names[i++], find_data.cFileName, sizeof(find_data.cFileName));
+        } while (FindNextFile(h, &find_data));
+
+        FindClose(h);
+        file_num = i;
+    }
+#else
+    // Get file number and names
+    struct dirent *entry;
+    DIR *dir = NULL;
+    dir = opendir(file_path);
+    if (dir != NULL)
+    {
+        while (entry = readdir(dir))
+        {
+            if (i >= max_file)
+                break;
+            // ignore"."
+            if (entry->d_name[0] == '.')
+                continue;
+            else
+                memcpy(file_names[i++], entry->d_name, sizeof(entry->d_name));
+        }
+
+        closedir(dir);
+        file_num = i;
+        // Sort the folder by alphabet
+        qsort(file_names, file_num, MAXPATHLENGTH, cmp);
+    }
+#endif
+    return file_num;
+}
+
+#endif
+
 #ifdef HAVE_VCS_VERSION_INC
 # include "vcs_version.inc"
 #endif
@@ -674,6 +745,11 @@ int CT_main(int argc, char* argv[], const char* version_str)
     }
 
     testcase = g_firstTestCase;
+
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+    CT_NNEFSetup();
+#endif
+
     while (testcase)
     {
         struct CT_TestEntry** ppLastTest = &testcase->tests_;
@@ -682,6 +758,7 @@ int CT_main(int argc, char* argv[], const char* version_str)
         for (; testcase->test_register_fns_[test_id]; test_id++)
         {
             *ppLastTest = testcase->test_register_fns_[test_id]();
+
             while (*ppLastTest)
             {
                 if (ppLastTest[0]->args_)
@@ -1068,6 +1145,7 @@ int CT_main(int argc, char* argv[], const char* version_str)
             );
 #endif
 #ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+        CT_NNEFTeardown();
         total_openvx_passed_nnef_tests = total_openvx_nnef_tests - total_openvx_failed_nnef_tests;
         printf("To be conformant to the Vision NNEF conformance profile, %d required test(s) must pass. %d tests passed, %d tests failed. %s.\n",
             total_openvx_nnef_tests, total_openvx_passed_nnef_tests, total_openvx_failed_nnef_tests,

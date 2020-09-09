@@ -161,6 +161,54 @@ struct CT_TestCaseEntry {
             { return &testcase##_##fn##_entry_disabled; }                                       \
         void testcase##_##fn##_body(Context_##testcase* context_, ArgType* arg_)
 
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+#define CT_TEST_WITH_ARG_DYNAMIC(testcase, fn, ArgType)                                         \
+        static void testcase##_##fn##_body(Context_##testcase*, ArgType*);                      \
+        static ArgType* testcase##_##fn##_args;                                                 \
+        static struct CT_TestEntry testcase##_##fn##_entry = {                                  \
+                NULL, NULL, (CT_TestFn)testcase##_##fn##_body, #fn,                             \
+                NULL,                                                                           \
+                0, sizeof(testcase##_##fn##_args[0])                                            \
+            };                                                                                  \
+        static struct CT_TestEntry* CT_MAKE_TEST_FN(fn, testcase)()                             \
+            { return &testcase##_##fn##_entry; }                                                \
+        static struct CT_TestEntry testcase##_##fn##_entry_disabled = {                         \
+                NULL, NULL, (CT_TestFn)testcase##_##fn##_body, "DISABLED_" #fn,                 \
+                NULL,                                                                           \
+                0, sizeof(testcase##_##fn##_args[0])                                            \
+            };                                                                                  \
+        static struct CT_TestEntry* CT_MAKE_TEST_FN(DISABLED_##fn, testcase)()                  \
+            { return &testcase##_##fn##_entry_disabled; }                                       \
+        void testcase##_##fn##_body(Context_##testcase* context_, ArgType* arg_)
+
+#define CT_TEST_WITH_ARG_SET(testcase, fn, ArgType, KernelName, KernelUrl, KerenlNum)               \
+    testcase##_##fn##_args = ct_alloc_mem(KerenlNum * sizeof(ArgType));                             \
+    ASSERT(testcase##_##fn##_args);                                                                 \
+    for (vx_int32 i = 0; i < KerenlNum; i++)                                                        \
+    {                                                                                               \
+        testcase##_##fn##_args[i].name = ct_alloc_mem(MAXPATHLENGTH * sizeof(vx_char));             \
+        testcase##_##fn##_args[i].url = ct_alloc_mem(MAXPATHLENGTH * sizeof(vx_char));              \
+        ASSERT(testcase##_##fn##_args[i].name && testcase##_##fn##_args[i].url);                    \
+    }                                                                                               \
+    for (vx_int32 i = 0; i < KerenlNum; i++)                                                        \
+    {                                                                                               \
+        memcpy(testcase##_##fn##_args[i].name, KernelName[i], sizeof(KernelName[i]));               \
+        testcase##_##fn##_args[i].type = "nnef";                                                    \
+        memcpy(testcase##_##fn##_args[i].url, KernelUrl[i], sizeof(KernelUrl[i]));                  \
+    }                                                                                               \
+    testcase##_##fn##_entry.args_ =  testcase##_##fn##_args;                                        \
+    testcase##_##fn##_entry.args_count_ =  KerenlNum;
+
+#define CT_TEST_WITH_ARG_FREE(testcase, fn, ArgType, KerenlNum)                                     \
+    for (vx_int32 i = 0; i < KerenlNum; i++)                                                        \
+    {                                                                                               \
+        ct_free_mem(testcase##_##fn##_args[i].name);                                                \
+        ct_free_mem(testcase##_##fn##_args[i].url);                                                 \
+    }                                                                                               \
+    ct_free_mem(testcase##_##fn##_args);
+
+#endif
+
 #define CT_TESTCASE_TESTS(testcase, ...) CT_TestRegisterFN testcase##_Tests[] = { CT_FOREACHN(CT_MAKE_TEST_FN, (testcase,), __VA_ARGS__), NULL };
 
 #define CT_ARG(...) { __VA_ARGS__ }
@@ -193,6 +241,13 @@ void CT_RecordFailure();
 void CT_RecordFailureAt(const char* message, const char* func, const char* file, const int line);
 void CT_RecordFailureAtFormat(const char* message, const char* func, const char* file, const int line, ...);
 int  CT_HasFailure();
+
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+#define MAX_NNEF_KERNELS        1024
+int  CT_ListFolder(int max_file, char *file_path, char file_names[MAX_NNEF_KERNELS][MAXPATHLENGTH]);
+void CT_NNEFSetup();
+void CT_NNEFTeardown();
+#endif
 
 void CT_DumpMessage(const char* message, ...);
 
@@ -333,6 +388,10 @@ void CT_CollectGarbage(int type);
 #define ARG      CT_ARG
 #define TEST_WITH_ARG  CT_TEST_WITH_ARG
 #define TESTCASE_TESTS CT_TESTCASE_TESTS
+
+#ifdef OPENVX_CONFORMANCE_NNEF_IMPORT
+#define TEST_WITH_ARG_DYNAMIC  CT_TEST_WITH_ARG_DYNAMIC
+#endif
 
 #define PASS CT_PASS
 

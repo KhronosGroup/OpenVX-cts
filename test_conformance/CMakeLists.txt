@@ -26,11 +26,16 @@ if(OPENVX_USE_NN_16)
 file(GLOB NETWORK_SOURCES "./Networks/src/*")
 endif(OPENVX_USE_NN_16)
 
+if(OPENVX_CONFORMANCE_NNEF_IMPORT)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/../kernels/nnef_parser)
+else()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+endif()
 
 add_subdirectory(Networks)
 
 add_executable(${target} ${SOURCES} ${HEADERS} ${NETWORK_SOURCES})
+
 target_link_libraries(${target} test_engine openvx-interface)
 
 set(TESTMODULE_FOLDER TestModule)

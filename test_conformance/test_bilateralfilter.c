@@ -404,7 +404,7 @@ static void ownCheckBilateralFilterResult(
                         {
                             vx_int32 tmpx = neighbor_x < 0 ? 0 : (neighbor_x >((vx_int32)in_dims[0] - 1) ? ((vx_int32)in_dims[0] - 1) : neighbor_x);
                             vx_int32 tmpy = neighbor_y < 0 ? 0 : (neighbor_y >((vx_int32)in_dims[1] - 1) ? ((vx_int32)in_dims[1] - 1) : neighbor_y);
-                            if (neighbor_x < 0 || neighbor_y < 0)
+                            if (neighbor_x < 0 || neighbor_y < 0 || neighbor_x >= (vx_int32)in_dims[0] || neighbor_y >= (vx_int32)in_dims[1])
                             {
                                 if (fmt == TT_U8)
                                 {
