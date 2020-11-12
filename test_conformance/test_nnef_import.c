@@ -21,7 +21,7 @@
 
 #include "test_engine/test.h"
 
-#include "nnef_parser.h"
+#include "cnnef.h"
 
 #include <string.h>
 
@@ -108,14 +108,23 @@ static inline size_t sizeof_tensor_type(int type)
     return 0;
 }
 
-static inline size_t compute_patch_size(const size_t *view_end, size_t number_of_dimensions)
+static inline size_t compute_patch_size(const vx_size *view_end, vx_size number_of_dimensions)
 {
-    size_t total_size = 1;
-    for (size_t i = 0; i < number_of_dimensions; i++)
+    vx_size total_size = 1;
+    for (vx_size i = 0; i < number_of_dimensions; i++)
     {
         total_size *= view_end[i];
     }
     return total_size;
+}
+
+// copying the dims into dimensions since OpenVX tensor created requires size_t
+static inline void copy_dims(const vx_int32 *dims, vx_int32 num_dims, vx_size *dimensions)
+{
+    for (vx_int32 i = 0; i < num_dims; i++)
+    {
+        dimensions[i] = dims[i];
+    }
 }
 
 static inline void set_filenames(vx_char **filenames, vx_int32 input_num, vx_int32 num_params, vx_char *url)
@@ -201,7 +210,7 @@ static inline void calculate_tensor_strides(vx_size num_dims, vx_int32 tensor_ty
     }
 }
 
-static inline enum vx_type_e tensor_vx_type(char * nnef_dtype)
+static inline enum vx_type_e tensor_vx_type(const vx_char * nnef_dtype)
 {
     if (strcmp(nnef_dtype, "scalar") == 0)
     {
@@ -226,22 +235,24 @@ static inline void set_input_parameter_to_node(vx_context context, vx_node node,
     vx_char fixed_point_precision = 0;
     vx_char perror[MAXLEN] = "";
 
-    nnef_tensor_t input_tensor = nnef_new_tensor();
+    nnef_tensor_t input_tensor = nnef_tensor_create();
 
-    vx_char *tensor_type_name;
+    const vx_char *tensor_type_name;
 
-    nnef_read_tensor(filenames[index], input_tensor, perror);
+    nnef_tensor_read(filenames[index], input_tensor, perror);
 
     // query NNEF tensor number of dim
-    vx_size num_dims = nnef_get_tensor_rank(input_tensor);
+    vx_size num_dims = nnef_tensor_rank(input_tensor);
 
-    // alloc memory according to num_dims
-    vx_size *dims = ct_alloc_mem(num_dims * sizeof(size_t));
     // query NNEF tensor number of dim
-    nnef_get_tensor_dims(input_tensor, dims);
+    const vx_int32 *dims = nnef_tensor_dims(input_tensor);
+
+    // copying the dims into dimensions since OpenVX tensor created requires size_t
+    vx_size *dimensions = ct_alloc_mem(num_dims * sizeof(vx_size));
+    copy_dims(dims, num_dims, dimensions);
 
     // query tensor type
-    tensor_type_name = nnef_get_tensor_dtype(input_tensor);
+    tensor_type_name = nnef_tensor_dtype(input_tensor);
     vx_int32 tensor_type = tensor_vx_type(tensor_type_name);
 
     vx_size *view_start = ct_alloc_mem(num_dims * sizeof(vx_size));
@@ -249,20 +260,20 @@ static inline void set_input_parameter_to_node(vx_context context, vx_node node,
     vx_size *tensor_strides = ct_alloc_mem(sizeof(vx_size) * num_dims);
     ASSERT(tensor_strides && view_start);
 
-    calculate_tensor_strides(num_dims, tensor_type, dims, tensor_strides);
+    calculate_tensor_strides(num_dims, tensor_type, dimensions, tensor_strides);
 
-    tensors[index] = vxCreateTensor(context, num_dims, dims, tensor_type, fixed_point_precision);
+    tensors[index] = vxCreateTensor(context, num_dims, dimensions, tensor_type, fixed_point_precision);
     ASSERT(tensors[index]);
 
-    VX_CALL(vxCopyTensorPatch(tensors[index], num_dims, view_start, dims,
-                              tensor_strides, (vx_char *)nnef_get_tensor_data(input_tensor), VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
+    VX_CALL(vxCopyTensorPatch(tensors[index], num_dims, view_start, dimensions,
+                              tensor_strides, (vx_char *)nnef_tensor_data(input_tensor), VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
 
     VX_CALL(vxSetParameterByIndex(node, index, (vx_reference)tensors[index]));
 
-    ct_free_mem(dims);
+    ct_free_mem(dimensions);
     ct_free_mem(tensor_strides);
     ct_free_mem(view_start);
-    nnef_free_tensor(input_tensor);
+    nnef_tensor_release(input_tensor);
 }
 
 // query output parameters of kernel to create tensor objects and add to node
@@ -313,22 +324,25 @@ static inline vx_status nnef_output_compare(vx_int32 *output_tensor_type, vx_siz
     vx_int32 i = 0;
     vx_status status = VX_SUCCESS;
     vx_char perror[MAXLEN] = "";
-    nnef_tensor_t ground_truth_tensor = nnef_new_tensor();
+    nnef_tensor_t ground_truth_tensor = nnef_tensor_create();
 
     for (i = 0; i < output_num; i++)
     {
-        nnef_read_tensor(filenames[i], ground_truth_tensor, perror);
+        nnef_tensor_read(filenames[i], ground_truth_tensor, perror);
 
-        vx_size ground_truth_num_dims = nnef_get_tensor_rank(ground_truth_tensor);
+        vx_size ground_truth_num_dims = nnef_tensor_rank(ground_truth_tensor);
 
-        vx_size *ground_truth_dims = ct_alloc_mem(ground_truth_num_dims * sizeof(size_t));
-        nnef_get_tensor_dims(ground_truth_tensor, ground_truth_dims);
+        const vx_int32 *ground_truth_dims = nnef_tensor_dims(ground_truth_tensor);
 
-        vx_int32 ground_truth_tensor_type = tensor_vx_type(nnef_get_tensor_dtype(ground_truth_tensor));
+        vx_size *ground_truth_dimensions = ct_alloc_mem(ground_truth_num_dims * sizeof(vx_size));
+        // copying the dims into dimensions since OpenVX tensor created requires size_t
+        copy_dims(ground_truth_dims, ground_truth_num_dims, ground_truth_dimensions);
 
-        vx_size ground_truth_volume = compute_patch_size(ground_truth_dims, ground_truth_num_dims);
+        vx_int32 ground_truth_tensor_type = tensor_vx_type(nnef_tensor_dtype(ground_truth_tensor));
 
-        vx_char *ground_truth_data = (vx_char *)nnef_get_tensor_data(ground_truth_tensor);
+        vx_size ground_truth_volume = compute_patch_size(ground_truth_dimensions, ground_truth_num_dims);
+
+        vx_char *ground_truth_data = (vx_char *)nnef_tensor_data(ground_truth_tensor);
 
         if (ground_truth_tensor_type != output_tensor_type[i])
         {
@@ -363,10 +377,10 @@ static inline vx_status nnef_output_compare(vx_int32 *output_tensor_type, vx_siz
                 }
             }
         }
-        ct_free_mem(ground_truth_dims);
+        ct_free_mem(ground_truth_dimensions);
     }
 
-    nnef_free_tensor(ground_truth_tensor);
+    nnef_tensor_release(ground_truth_tensor);
 
     return status;
 }
