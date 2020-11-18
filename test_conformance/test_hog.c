@@ -68,7 +68,7 @@ TEST(HogCells, testNodeCreation)
     ASSERT(input == 0);
 }
 
-static CT_Image hog_read_image(const char *fileName, int width, int height)
+static CT_Image hog_read_image(const vx_char *fileName, vx_int32 width, vx_int32 height)
 {
     CT_Image image = NULL;
     ASSERT_(return 0, width == 0 && height == 0);
@@ -93,20 +93,23 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
     height = img->height;
     vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
     vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    vx_int16* mag = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width *sizeof(vx_int16));
+    vx_int16* mag = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
     vx_int16* bins_p = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
     memset(mag_ref, 0, height / cell_height * width / cell_width * sizeof(vx_int16));
     memset(bins_ref, 0, height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    float num_div_360 = (float)bins_num / 360.0f;
+    vx_float32 num_div_360 = (vx_float32)bins_num / 360.0f;
 
-    vx_size magnitudes_dim_num = 2, magnitudes_dims[6] = { width/cell_width, height/cell_height,0 }, magnitudes_strides[6] = { 0 };
+    vx_size magnitudes_dim_num = 2, magnitudes_dims[6] = { width / cell_width, height / cell_height,0 }, magnitudes_strides[6] = { 0 };
     vx_size bins_dim_num = 3, bins_dims[6] = { width / cell_width, height / cell_height, bins_num }, bins_strides[6] = { 0 };
     magnitudes_strides[0] = 2;
     bins_strides[0] = 2;
-    for (vx_size i = 1; i < magnitudes_dim_num; i++) {
+
+    for (vx_size i = 1; i < magnitudes_dim_num; i++)
+    {
         magnitudes_strides[i] = magnitudes_dims[i - 1] * magnitudes_strides[i - 1];
     }
-    for (vx_size i = 1; i < bins_dim_num; i++) {
+    for (vx_size i = 1; i < bins_dim_num; i++)
+    {
         bins_strides[i] = bins_dims[i - 1] * bins_strides[i - 1];
     }
 
@@ -115,18 +118,19 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
     vxCopyTensorPatch(bins, bins_dim_num, view_start, bins_dims, bins_strides, bins_p, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
 
     vx_int32 num_cellw = (vx_int32)floor(((vx_float64)width) / ((vx_float64)cell_width));
-    for (int j = 0; j < height; j++)
+
+    for (vx_int32 j = 0; j < height; j++)
     {
-        for (int i = 0; i < width; i++)
+        for (vx_int32 i = 0; i < width; i++)
         {
-            int x1 = i - 1 < 0 ? 0 : i - 1;
-            int x2 = i + 1 >= width ? width - 1 : i + 1;
+            vx_int32 x1 = i - 1 < 0 ? 0 : i - 1;
+            vx_int32 x2 = i + 1 >= width ? width - 1 : i + 1;
             vx_uint8 *gx1 = (vx_uint8*)((vx_uint8*)p_ct_base + j * img->stride + x1);
             vx_uint8 *gx2 = (vx_uint8*)((vx_uint8*)p_ct_base + j * img->stride + x2);
             gx = *gx2 - *gx1;
 
-            int y1 = j - 1 < 0 ? 0 : j - 1;
-            int y2 = j + 1 >= height ? height - 1 : j + 1;
+            vx_int32 y1 = j - 1 < 0 ? 0 : j - 1;
+            vx_int32 y2 = j + 1 >= height ? height - 1 : j + 1;
             vx_uint8 *gy1 = (vx_uint8*)((vx_uint8*)p_ct_base + y1 * img->stride + i);
             vx_uint8 *gy2 = (vx_uint8*)((vx_uint8*)p_ct_base + y2 * img->stride + i);
             gy = *gy2 - *gy1;
@@ -134,7 +138,8 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
             magnitude = sqrtf(powf(gx, 2) + powf(gy, 2));
             orientation = fmod(atan2f(gy, gx + 0.00000000000001)
                 * (180 / 3.14159265), 360);
-            if (orientation < 0) {
+            if (orientation < 0)
+            {
                 orientation += 360;
             }
 
@@ -148,7 +153,7 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
             *(bins_ref + bins_index) += magnitude / (cell_width * cell_height);
         }
     }
-    for (int i = 0; i < height / cell_height * width / cell_width; i++)
+    for (vx_int32 i = 0; i < height / cell_height * width / cell_width; i++)
     {
         vx_float32 mag_ref_data = *(mag_ref + i);
         vx_float32 mag_data = *(mag + i);
@@ -160,7 +165,7 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
     }
     if (status == VX_SUCCESS)
     {
-        for (int i = 0; i < height / cell_height * width / cell_width * bins_num; i++)
+        for (vx_int32 i = 0; i < height / cell_height * width / cell_width * bins_num; i++)
         {
             vx_float32 bins_ref_data = *(bins_ref + i);
             vx_float32 bins_data = *(bins_p + i);
@@ -180,14 +185,15 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
 }
 
 
-typedef struct {
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height);
-    const char* fileName;
+typedef struct 
+{
+    const vx_char* testName;
+    CT_Image(*generator)(const vx_char* fileName, vx_int32 width, vx_int32 height);
+    const vx_char* fileName;
     vx_int32 cell_width;
     vx_int32 cell_height;
     vx_int32 bins_num;
-    const char* result_filename;
+    const vx_char* result_filename;
 } Arg;
 
 #define PARAMETERS \
@@ -285,14 +291,15 @@ TEST_WITH_ARG(HogCells, testImmediateProcessing, Arg,
 
     ASSERT(src_image == 0);
 }
+
 TESTCASE_TESTS(HogCells,
-               testNodeCreation,
-               testGraphProcessing,
-               testImmediateProcessing)
+    testNodeCreation,
+    testGraphProcessing,
+    testImmediateProcessing)
 
-TESTCASE(HogFeatures, CT_VXContext, ct_setup_vx_context, 0)
+    TESTCASE(HogFeatures, CT_VXContext, ct_setup_vx_context, 0)
 
-TEST(HogFeatures, testNodeCreation)
+    TEST(HogFeatures, testNodeCreation)
 {
     vx_context context = context_->vx_context_;
     vx_image input = 0;
@@ -320,11 +327,13 @@ TEST(HogFeatures, testNodeCreation)
     params.cell_width = 8;
     params.cell_height = 8;
     params.num_bins = 9;
+
     const vx_size features_dims[3] = { (src_width - params.window_width) / params.window_stride + 1,
-        (src_height - params.window_height) / params.window_stride + 1,
-        ((params.window_width - params.block_width) / params.block_stride + 1) *
-        ((src_height - params.block_height) / params.block_stride + 1) *
-        ((params.block_width * params.block_height) / (params.cell_width * params.cell_height)) * num_bins };
+                                   (src_height - params.window_height) / params.window_stride + 1,
+                                   ((params.window_width - params.block_width) / params.block_stride + 1) *
+                                   ((params.window_height - params.block_height) / params.block_stride + 1) *
+                                   ((params.block_width * params.block_height) / (params.cell_width * params.cell_height)) * num_bins };
+
     ASSERT_VX_OBJECT(input = vxCreateImage(context, src_width, src_height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(magnitudes = vxCreateTensor(context, 2, mag_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
     ASSERT_VX_OBJECT(bins = vxCreateTensor(context, 3, bins_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
@@ -360,6 +369,7 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
     vx_float32 orientation;
     vx_float32 magnitude;
     vx_int8 bin;
+    vx_int32 block_index_count = 0;
 
     width = img->width;
     height = img->height;
@@ -375,46 +385,58 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
     vx_int32 n_cellsx = width / cell_width;
     vx_int32 cells_per_block_w = params.block_width / cell_width;
     vx_int32 cells_per_block_h = params.block_height / cell_height;
+    vx_int32 blocks_per_window_w = (params.window_width - params.block_width) / params.block_stride + 1;
+    vx_int32 blocks_per_window_h = (params.window_height - params.block_height) / params.block_stride + 1;
 
     vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
     vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    vx_int16* features_ref = (vx_int16 *)ct_alloc_mem(num_windowsW * num_windowsH * params.window_width / params.block_stride *
-                                                params.window_height / params.block_stride *bins_num * sizeof(vx_int16));
-    vx_int16* features_p = (vx_int16 *)ct_alloc_mem(num_windowsW * num_windowsH * params.window_width / params.block_stride *
-                                              params.window_height / params.block_stride *bins_num * sizeof(vx_int16));
-    memset(mag_ref, 0, height / cell_height * width / cell_width * sizeof(vx_int16));
-    memset(bins_ref, 0, height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    memset(features_ref, 0, num_windowsW * num_windowsH * params.window_width / params.block_stride *
-        params.window_height / params.block_stride *bins_num * sizeof(vx_int16));
+    vx_size features_dim_num = 3;
 
-    float num_div_360 = (float)bins_num / 360.0f;
+    vx_size features_dims[3] = { (width - params.window_width) / params.window_stride + 1,
+                                 (height - params.window_height) / params.window_stride + 1,
+                                 ((params.window_width - params.block_width) / params.block_stride + 1) *
+                                 ((params.window_height - params.block_height) / params.block_stride + 1) *
+                                 (params.block_width * params.block_height) / (cell_width * cell_height) * bins_num };
 
-    vx_size features_dim_num = 3, features_dims[6] = { num_windowsW, num_windowsH, params.window_width / params.block_stride *
-        params.window_height / params.block_stride *bins_num }, features_strides[6] = { 2, 2 * num_windowsW, 2 * num_windowsW * num_windowsH};
-    const size_t view_start[6] = { 0 };
+    vx_size features_strides[3] = { sizeof(vx_int16), sizeof(vx_int16) *features_dims[0] , sizeof(vx_int16) *features_dims[0] * features_dims[1] };
+    vx_size tensor_data_len = features_dims[0] * features_dims[1] * features_dims[2] * sizeof(vx_int16);
+
+    vx_int16* features_p = (vx_int16 *)ct_alloc_mem(tensor_data_len);
+    vx_int16* features_ref = (vx_int16 *)ct_alloc_mem(tensor_data_len);
+
+    memset(mag_ref, 0, (height / cell_height) * (width / cell_width) * sizeof(vx_int16));
+    memset(bins_ref, 0, (height / cell_height) * (width / cell_width) * bins_num * sizeof(vx_int16));
+    memset(features_ref, 0, tensor_data_len);
+
+    vx_float32 num_div_360 = (vx_float32)bins_num / 360.0f;
+
+    const vx_size view_start[3] = { 0 };
     vxCopyTensorPatch(features, features_dim_num, view_start, features_dims, features_strides, features_p, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
 
     vx_int32 num_cellw = (vx_int32)floor(((vx_float64)width) / ((vx_float64)cell_width));
-    for (int j = 0; j < height; j++)
+
+    for (vx_int32 j = 0; j < height; j++)
     {
-        for (int i = 0; i < width; i++)
+        for (vx_int32 i = 0; i < width; i++)
         {
-            int x1 = i - 1 < 0 ? 0 : i - 1;
-            int x2 = i + 1 >= width ? width - 1 : i + 1;
+            vx_int32 x1 = i - 1 < 0 ? 0 : i - 1;
+            vx_int32 x2 = i + 1 >= width ? width - 1 : i + 1;
             vx_uint8 *gx1 = (vx_uint8*)((vx_uint8*)p_ct_base + j * img->stride + x1);
             vx_uint8 *gx2 = (vx_uint8*)((vx_uint8*)p_ct_base + j * img->stride + x2);
             gx = *gx2 - *gx1;
 
-            int y1 = j - 1 < 0 ? 0 : j - 1;
-            int y2 = j + 1 >= height ? height - 1 : j + 1;
+            vx_int32 y1 = j - 1 < 0 ? 0 : j - 1;
+            vx_int32 y2 = j + 1 >= height ? height - 1 : j + 1;
             vx_uint8 *gy1 = (vx_uint8*)((vx_uint8*)p_ct_base + y1 * img->stride + i);
             vx_uint8 *gy2 = (vx_uint8*)((vx_uint8*)p_ct_base + y2 * img->stride + i);
             gy = *gy2 - *gy1;
 
             magnitude = sqrtf(powf(gx, 2) + powf(gy, 2));
             orientation = fmod(atan2f(gy, gx + 0.00000000000001)
-                * (180 / 3.14159265), 360);
-            if (orientation < 0) {
+                          * (180 / 3.14159265), 360);
+
+            if (orientation < 0) 
+            {
                 orientation += 360;
             }
 
@@ -428,37 +450,104 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
             *(bins_ref + bins_index) += magnitude / (cell_width * cell_height);
         }
     }
-    for (vx_int32 blkH = 0; blkH < num_blockH; blkH++)
+    // The below for-loop implements the following for each window:
+    // 1. Normalizes the histograms at block level using it's cells' magnitudes (L2-Sys)
+    // 2. Calculates HoG Descriptors for each window of the image, which is 
+    // the concatenated descriptors of all the blocks contained in it.
+    //
+    // Note: Windows in an image, blocks in a window and cells in a block, 
+    // are all processed in a row-major order. Cell bins are addressed in row-major 
+    // spanning the entire image. E.g. An image 24x16 has 6 cells of size 8x8. Bin Idx 0-8 
+    // for top left cell, 9-17 for next cell to the right, 18-26 for last cell on top row.
+    // For next row, cell's Bin Idx are 27-35, 36-44, 44-52.
+    for (vx_int32 winH = 0; winH < num_windowsH; winH++)
     {
-        for (vx_int32 blkW = 0; blkW < num_blockW; blkW++)
+        for (vx_int32 winW = 0; winW < num_windowsW; winW++)
         {
-            vx_float32 sum = 0;
-            for (vx_int32 y = 0; y < cells_per_block_h; y++)
+            // Indexes corresponding to the first cell (top left) of window and block
+            vx_uint64 binIdx_blk, binIdx_win;
+            vx_uint64 binIdx_cell, magIdx_cell;
+            binIdx_win = (winH * (n_cellsx * params.window_stride / params.cell_height) +
+                          winW * (params.window_stride / params.cell_width)) * params.num_bins;
+
+            for (vx_int32 blkH = 0; blkH < blocks_per_window_h; blkH++)
             {
-                for (vx_int32 x = 0; x < cells_per_block_w; x++)
+                for (vx_int32 blkW = 0; blkW < blocks_per_window_w; blkW++)
                 {
-                    vx_int32 index = (blkH + y)*n_cellsx + (blkW + x);
-                    sum += (*(mag_ref + index)) * (*(mag_ref + index));
-                }
-            }
-            sum = sqrtf(sum + 0.00000000000001);
-            for (vx_int32 y = 0; y < cells_per_block_h; y++)
-            {
-                for (vx_int32 x = 0; x < cells_per_block_w; x++)
-                {
-                    for (vx_int32 k = 0; k < bins_num; k++)
+                    binIdx_blk = binIdx_win + (blkH * (n_cellsx * params.block_stride / params.cell_height) * params.num_bins) +
+                                 (blkW * params.block_stride / params.cell_height) * params.num_bins;
+
+                    vx_float32 sum = 0;
+                    vx_float32 renorm_sum = 0;
+                    vx_uint32 renorm_block_index_st = block_index_count;
+
+                    // Accumulate squared-magnitudes for all the cells in this block
+                    for (vx_int32 y = 0; y < cells_per_block_h; y++)
                     {
-                        vx_int32 bins_index = (blkH + y)*n_cellsx * bins_num + (blkW + x)*bins_num + k;
-                        vx_int32 block_index = blkH * num_blockW * bins_num + blkW * bins_num + k;
-                        float hist = min((*(bins_ref + bins_index) / sum), params.threshold);
-                        vx_int16 *features_ptr = features_ref + block_index;
-                        *features_ptr = *features_ptr + hist;
+                        for (vx_int32 x = 0; x < cells_per_block_w; x++)
+                        {
+                            magIdx_cell = (binIdx_blk / params.num_bins) + (y * n_cellsx + x);
+                            void *mag_ptr = (vx_int16 *)mag_ref + magIdx_cell;
+                            sum += (*(vx_int16 *)mag_ptr) * (*(vx_int16 *)mag_ptr);
+                        }
                     }
-                }
-            }
-        }
-    }
-    for (int i = 0; i < num_windowsW * num_windowsH * params.window_width / params.block_stride *
+                    // Square root of sum-of-squares of cell magnitudes for L2-Norm
+                    // For a block with 4 cells with mag m: sqrt( m1^2 + m2^2 + m3^2 + m4^2)
+                    sum = sqrtf(sum + 0.00000000000001f);
+
+                    // Calculate HoG Descriptor for the current block from its cell histograms 
+                    for (vx_int32 y = 0; y < cells_per_block_h; y++)
+                    {
+                        for (vx_int32 x = 0; x < cells_per_block_w; x++)
+                        {
+                            binIdx_cell = binIdx_blk + (y * n_cellsx + x) * params.num_bins;
+
+                            for (vx_int32 k = 0; k < params.num_bins; k++)
+                            {
+                                // Bin index for the current cell
+                                vx_int32 bins_index = binIdx_cell + k;
+                                vx_int32 block_index;
+
+                                block_index = block_index_count;
+
+                                // L2-Sys (at block level) = L2-Norm -> clip at threshold -> renormalize
+
+                                // Normalize each cell histogram bin value using L2-Norm and then clip at threshold
+                                // using square root of sum-of-squares of cell magnitudes calculated above
+                                vx_float32 hist = min((vx_int16)(*((vx_int16 *)bins_ref + bins_index)) / sum, params.threshold);
+                                vx_int16 *features_ptr = (vx_int16 *)features_ref + block_index;
+                                hist = hist * powf(2, 8); // Bitshift for storing as INT16, Q78 feature tensor
+                                *features_ptr = (vx_int16)hist;
+                                block_index_count++;
+                            } // End for num_bins
+                        } // End for cell_w
+                    } // End for cell_h
+
+                    // Renormalize the block histogram after L2-Norm and clipping to get L2-Hys
+                    vx_uint32 renorm_block_index_end = block_index_count;
+
+                    // Sum of squares of the block feature vector
+                    for (vx_uint32 renorm_count = renorm_block_index_st; renorm_count < renorm_block_index_end; renorm_count++)
+                    {
+                        vx_int16 *features_ptr = (vx_int16 *)features_ref + renorm_count;
+                        vx_float32 feature_val = *features_ptr / powf(2, 8);	// Convert INT16 Q78 tensor value to float
+                        renorm_sum += (feature_val * feature_val);
+                    }
+
+                    renorm_sum = sqrtf(renorm_sum + 0.00000000000001f);			// Sqrt of 'sum of squares' for renormalization
+
+                    // Renormalize the whole block feature vector
+                    for (vx_uint32 renorm_count = renorm_block_index_st; renorm_count < renorm_block_index_end; renorm_count++)
+                    {
+                        vx_int16 *features_ptr = (vx_int16 *)features_ref + renorm_count;
+                        vx_float32 feature_val = ((vx_float32)*features_ptr) / powf(2, 8);	// Convert INT16 Q78 tensor value to float
+                        *features_ptr = (vx_int16)((feature_val / renorm_sum) * powf(2, 8));	// Renormalize and Bitshift for INT16, Q78 feature tensor
+                    }
+                }	// End for BlkW
+            }	// End for BlkH
+        }	// End for winW
+    }	// End for winH
+    for (vx_int32 i = 0; i < num_windowsW * num_windowsH * params.window_width / params.block_stride *
         params.window_height / params.block_stride *bins_num; i++)
     {
         vx_float32 features_ref_data = *(features_ref + i);
@@ -478,10 +567,11 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
 }
 
 
-typedef struct {
-    const char* testName;
-    CT_Image(*generator)(const char* fileName, int width, int height);
-    const char* fileName;
+typedef struct 
+{
+    const vx_char* testName;
+    CT_Image(*generator)(const vx_char* fileName, vx_int32 width, vx_int32 height);
+    const vx_char* fileName;
     vx_hog_t hog_params;
 } Arg_features;
 
@@ -518,10 +608,11 @@ TEST_WITH_ARG(HogFeatures, testGraphProcessing, Arg_features,
     const vx_size mag_dims[2] = { src_width / cell_width, src_height / cell_height };
     const vx_size bins_dims[3] = { src_width / cell_width, src_height / cell_height, bins_num };
     const vx_size features_dims[3] = { (src_width - arg_->hog_params.window_width) / arg_->hog_params.window_stride + 1,
-        (src_height - arg_->hog_params.window_height) / arg_->hog_params.window_stride + 1,
-        ((arg_->hog_params.window_width - arg_->hog_params.block_width) / arg_->hog_params.block_stride + 1) *
-        ((src_height - arg_->hog_params.block_height) / arg_->hog_params.block_stride + 1) *
-        ((arg_->hog_params.block_width * arg_->hog_params.block_height) / (arg_->hog_params.cell_width * arg_->hog_params.cell_height)) * bins_num };
+                                       (src_height - arg_->hog_params.window_height) / arg_->hog_params.window_stride + 1,
+                                       ((arg_->hog_params.window_width - arg_->hog_params.block_width) / arg_->hog_params.block_stride + 1) *
+                                       ((arg_->hog_params.window_height - arg_->hog_params.block_height) / arg_->hog_params.block_stride + 1) *
+                                       ((arg_->hog_params.block_width * arg_->hog_params.block_height) / (arg_->hog_params.cell_width * arg_->hog_params.cell_height)) * bins_num };
+
     vx_tensor magnitudes;
     vx_tensor bins;
     vx_tensor features;
@@ -575,10 +666,11 @@ TEST_WITH_ARG(HogFeatures, testImmediateProcessing, Arg_features,
     const vx_size mag_dims[2] = { src_width / cell_width, src_height / cell_height };
     const vx_size bins_dims[3] = { src_width / cell_width, src_height / cell_height, bins_num };
     const vx_size features_dims[3] = { (src_width - arg_->hog_params.window_width) / arg_->hog_params.window_stride + 1,
-        (src_height - arg_->hog_params.window_height) / arg_->hog_params.window_stride + 1,
-        ((arg_->hog_params.window_width - arg_->hog_params.block_width) / arg_->hog_params.block_stride + 1) *
-        ((src_height - arg_->hog_params.block_height) / arg_->hog_params.block_stride + 1) *
-        ((arg_->hog_params.block_width * arg_->hog_params.block_height) / (arg_->hog_params.cell_width * arg_->hog_params.cell_height)) * bins_num };
+                                       (src_height - arg_->hog_params.window_height) / arg_->hog_params.window_stride + 1,
+                                       ((arg_->hog_params.window_width - arg_->hog_params.block_width) / arg_->hog_params.block_stride + 1) *
+                                       ((arg_->hog_params.window_height - arg_->hog_params.block_height) / arg_->hog_params.block_stride + 1) *
+                                       ((arg_->hog_params.block_width * arg_->hog_params.block_height) / (arg_->hog_params.cell_width * arg_->hog_params.cell_height)) * bins_num };
+
     vx_tensor magnitudes;
     vx_tensor bins;
     vx_tensor features;
@@ -601,8 +693,8 @@ TEST_WITH_ARG(HogFeatures, testImmediateProcessing, Arg_features,
     ASSERT(src_image == 0);
 }
 TESTCASE_TESTS(HogFeatures,
-               testNodeCreation,
-               testGraphProcessing,
-               testImmediateProcessing)
+    testNodeCreation,
+    testGraphProcessing,
+    testImmediateProcessing)
 
 #endif //OPENVX_USE_ENHANCED_VISION
