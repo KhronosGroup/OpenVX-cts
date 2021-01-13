@@ -547,8 +547,7 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
             }	// End for BlkH
         }	// End for winW
     }	// End for winH
-    for (vx_int32 i = 0; i < num_windowsW * num_windowsH * params.window_width / params.block_stride *
-        params.window_height / params.block_stride *bins_num; i++)
+    for (vx_int32 i = 0; i < tensor_data_len / sizeof(vx_int16); i++)
     {
         vx_float32 features_ref_data = *(features_ref + i);
         vx_float32 features_data = *(features_p + i);
