@@ -257,6 +257,10 @@ void CT_CollectGarbage(int type)
 #if defined __linux__
 #include "dirent.h"
 #endif
+#if __APPLE__
+#include <sys/types.h>
+#include <dirent.h>
+#endif
 
 // sort the folder by alphabet
 static int cmp(const void *a, const void *b)
@@ -266,7 +270,7 @@ static int cmp(const void *a, const void *b)
     return strcmp(s1, s2);
 }
 
-// list all the folder nams in file_path
+// list all the folder names in file_path
 int CT_ListFolder(int max_file, char *file_path, char file_names[MAX_NNEF_KERNELS][MAXPATHLENGTH])
 {
     int i = 0, file_num = 0;
@@ -301,7 +305,7 @@ int CT_ListFolder(int max_file, char *file_path, char file_names[MAX_NNEF_KERNEL
     dir = opendir(file_path);
     if (dir != NULL)
     {
-        while (entry = readdir(dir))
+        while ((entry = readdir(dir)))
         {
             if (i >= max_file)
                 break;
