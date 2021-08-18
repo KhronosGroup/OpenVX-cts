@@ -284,9 +284,9 @@ TESTCASE_TESTS(Target,
 
 TESTCASE_TESTS(TargetBase,
         testvxCreateContext,
-        testvxQueryContext,
+        //testvxQueryContext, - negative test turn off
         testvxReleaseContext,
-        testvxSetContextAttribute,
-        testvxSetImmediateModeTargetBase,
+        //testvxSetContextAttribute, - negative test turn off
+        //testvxSetImmediateModeTargetBase, - negative test turn off
         testvxSetNodeTargetBase
         )

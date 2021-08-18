@@ -837,7 +837,7 @@ TESTCASE_TESTS(SmokeTestBase,
         test_vxUnloadKernels,
         test_vxSetReferenceName,
         test_vxGetStatus,
-        test_vxGetContext,
+        //test_vxGetContext, - negative test turn off
         test_vxQueryReference,
         test_vxRetainReferenceBase
         )
