@@ -594,6 +594,7 @@ TEST_WITH_ARG(WarpAffine, testWithValidRegion, ValidRegionTest_Arg,
     ASSERT_NO_FAILURE(output = ct_image_from_vx_image(output_image));
 
     ASSERT_NO_FAILURE(ct_adjust_roi(input, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
+    ASSERT_NO_FAILURE(ct_adjust_roi(output, rect_shft.start_x, rect_shft.start_y, -rect_shft.end_x, -rect_shft.end_y));
     ASSERT_NO_FAILURE(warp_affine_check(input, output, arg_->interp_type, border, m));
 
     VX_CALL(vxReleaseMatrix(&matrix));
