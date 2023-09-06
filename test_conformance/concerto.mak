@@ -1,4 +1,4 @@
-# 
+#
 
 # Copyright (c) 2012-2017 The Khronos Group Inc.
 #
@@ -21,10 +21,17 @@ TARGET      := vx_test_conformance
 TARGETTYPE  := exe
 CSOURCES    := $(call all-c-files)
 IDIRS       += $(HOST_ROOT)/cts
+ifneq (,$(findstring OPENVX_CONFORMANCE_NNEF_IMPORT,$(SYSDEFS)))
+IDIRS       += $(HOST_ROOT)/kernels/NNEF-Tools/parser/cpp/include/
+endif
+
 SHARED_LIBS := openvx vxu
 STATIC_LIBS := vx_conformance_engine
 ifneq (,$(findstring OPENVX_USE_NN_16,$(SYSDEFS)))
 STATIC_LIBS +=  network
+endif
+ifneq (,$(findstring OPENVX_CONFORMANCE_NNEF_IMPORT,$(SYSDEFS)))
+SHARED_LIBS += nnef-lib
 endif
 ifeq ($(HOST_COMPILER),GCC)
 CFLAGS += -Wno-unused-function
