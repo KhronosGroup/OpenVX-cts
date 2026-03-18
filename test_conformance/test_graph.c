@@ -869,6 +869,7 @@ TEST_WITH_ARG(Graph, testKernelName, kernel_name_arg,
     ARG("org.khronos.openvx.halfscale_gaussian",    VX_KERNEL_HALFSCALE_GAUSSIAN),
     ARG("org.khronos.openvx.min",                   VX_KERNEL_MIN),
     ARG("org.khronos.openvx.max",                   VX_KERNEL_MAX),
+    ARG("org.khronos.openvx.weightedaverage",       VX_KERNEL_WEIGHTED_AVERAGE),
     )
 {
     vx_context context = context_->vx_context_;

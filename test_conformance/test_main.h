@@ -58,6 +58,7 @@ TESTCASE(MeanStdDev)
 TESTCASE(MinMaxLoc)
 TESTCASE(Min)
 TESTCASE(Max)
+TESTCASE(WeightedAverage)
 TESTCASE(Threshold)
 
 TESTCASE(Box3x3)
