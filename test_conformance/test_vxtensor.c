@@ -531,6 +531,127 @@ TEST_WITH_ARG(Tensor, testvxCreateVirtualTensor, test_tensor_arg,
 
     ct_free_mem(tensor_dims);
 }
+
+TEST_WITH_ARG(Tensor, testvxCreateTensorFromView, test_tensor_arg,
+    ARG("Q78_vxCreateTensorFromView", TT_Q78),
+    ARG("U8_vxCreateTensorFromView", TT_U8),
+    ARG("S8_vxCreateTensorFromView", TT_S8),
+    )
+{
+    const vx_context context = context_->vx_context_;
+
+    const enum TestTensorDF fmt = arg_->fmt;
+    assert(fmt == TT_Q78 || fmt == TT_U8 || fmt == TT_S8);
+
+    vx_enum data_type = 0;
+    vx_uint8 fixed_point_position = 0;
+    vx_size sizeof_data_type = 0;
+    ownUnpackFormat(fmt, &data_type, &fixed_point_position, &sizeof_data_type);
+
+    const vx_size ndims = 3;
+    const vx_size parent_dims[3] = { 10, 12, 8 };
+
+    vx_tensor parent = vxCreateTensor(context, ndims, parent_dims, data_type, fixed_point_position);
+    ASSERT_VX_OBJECT(parent, VX_TYPE_TENSOR);
+
+    /* Fill parent tensor with sequential data */
+    vx_size total_elements = 1;
+    for (vx_size i = 0; i < ndims; ++i)
+        total_elements *= parent_dims[i];
+
+    vx_size parent_strides[3];
+    parent_strides[0] = sizeof_data_type;
+    parent_strides[1] = parent_strides[0] * parent_dims[0];
+    parent_strides[2] = parent_strides[1] * parent_dims[1];
+
+    size_t malloc_bytes = total_elements * sizeof_data_type;
+    void *parent_data = ct_alloc_mem(malloc_bytes);
+    ASSERT(parent_data);
+    memset(parent_data, 0, malloc_bytes);
+
+    uint64_t rng;
+    {
+        uint64_t *seed = &CT()->seed_;
+        ASSERT(!!seed);
+        CT_RNG_INIT(rng, *seed);
+    }
+    ownFillRandData(fmt, &rng, total_elements, parent_data);
+
+    vx_size zeros[3] = { 0, 0, 0 };
+    VX_CALL(vxCopyTensorPatch(parent, ndims, zeros, parent_dims, parent_strides,
+        parent_data, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
+
+    /* Create a view: sub-region [2..7, 3..9, 1..5] */
+    const vx_size view_start[3] = { 2, 3, 1 };
+    const vx_size view_end[3]   = { 7, 9, 5 };
+
+    vx_tensor view = vxCreateTensorFromView(parent, ndims, view_start, view_end);
+    ASSERT_VX_OBJECT(view, VX_TYPE_TENSOR);
+
+    /* Verify view dimensions */
+    vx_size view_ndims = 0;
+    VX_CALL(vxQueryTensor(view, VX_TENSOR_NUMBER_OF_DIMS, &view_ndims, sizeof(view_ndims)));
+    EXPECT_EQ_INT(ndims, view_ndims);
+
+    vx_size view_dims[3] = { 0, 0, 0 };
+    VX_CALL(vxQueryTensor(view, VX_TENSOR_DIMS, view_dims, sizeof(vx_size) * ndims));
+    EXPECT_EQ_INT(view_end[0] - view_start[0], view_dims[0]);
+    EXPECT_EQ_INT(view_end[1] - view_start[1], view_dims[1]);
+    EXPECT_EQ_INT(view_end[2] - view_start[2], view_dims[2]);
+
+    /* Verify data type matches parent */
+    vx_enum view_data_type = 0;
+    VX_CALL(vxQueryTensor(view, VX_TENSOR_DATA_TYPE, &view_data_type, sizeof(view_data_type)));
+    EXPECT_EQ_INT(data_type, view_data_type);
+
+    vx_int8 view_fpp = 0;
+    VX_CALL(vxQueryTensor(view, VX_TENSOR_FIXED_POINT_POSITION, &view_fpp, sizeof(view_fpp)));
+    EXPECT_EQ_INT(fixed_point_position, view_fpp);
+
+    /* Read data from the view and verify it matches the parent sub-region */
+    vx_size view_elements = view_dims[0] * view_dims[1] * view_dims[2];
+    size_t view_bytes = view_elements * sizeof_data_type;
+    void *view_data = ct_alloc_mem(view_bytes);
+    ASSERT(view_data);
+
+    vx_size view_strides[3];
+    view_strides[0] = sizeof_data_type;
+    view_strides[1] = view_strides[0] * view_dims[0];
+    view_strides[2] = view_strides[1] * view_dims[1];
+
+    vx_size view_zeros[3] = { 0, 0, 0 };
+    VX_CALL(vxCopyTensorPatch(view, ndims, view_zeros, view_dims, view_strides,
+        view_data, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+
+    for (vx_size z = 0; z < view_dims[2]; ++z)
+    {
+        for (vx_size y = 0; y < view_dims[1]; ++y)
+        {
+            for (vx_size x = 0; x < view_dims[0]; ++x)
+            {
+                size_t view_offset = (z * view_strides[2]) + (y * view_strides[1]) + (x * view_strides[0]);
+                size_t parent_offset =
+                    ((z + view_start[2]) * parent_strides[2]) +
+                    ((y + view_start[1]) * parent_strides[1]) +
+                    ((x + view_start[0]) * parent_strides[0]);
+
+                int match = (memcmp((char*)view_data + view_offset,
+                                    (char*)parent_data + parent_offset,
+                                    sizeof_data_type) == 0);
+                EXPECT_EQ_INT(1, match);
+            }
+        }
+    }
+
+    ct_free_mem(view_data);
+    ct_free_mem(parent_data);
+
+    VX_CALL(vxReleaseTensor(&view));
+    VX_CALL(vxReleaseTensor(&parent));
+    EXPECT_EQ_PTR(NULL, view);
+    EXPECT_EQ_PTR(NULL, parent);
+}
+
 #endif
 
 #ifdef OPENVX_USE_ENHANCED_VISION
@@ -654,7 +775,8 @@ TESTCASE_TESTS(Tensor,
     testvxCreateTensorFromHandle,
     testvxSwapTensorHandle,
     testMapandUnMapTensorPatch,
-    testvxCreateVirtualTensor)
+    testvxCreateVirtualTensor,
+    testvxCreateTensorFromView)
 
 #endif
 

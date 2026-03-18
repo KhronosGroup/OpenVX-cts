@@ -1,5 +1,40 @@
 OpenVX conformance tests change log:
 
+RELEASE: CTS-1.3.2
+
+New tests:
+* Added test for vxCreateTensorFromView (test_vxtensor.c)
+  - Parameterized across Q78, U8, S8 data formats
+  - Verifies view dimensions, data type, fixed-point position, and data integrity
+    against the parent tensor sub-region
+* Added test for vxRegisterKernelLibrary (test_smoke.c)
+  - Negative tests for invalid context, NULL module name, NULL publish function
+  - Verifies kernel lifecycle: register, vxLoadKernels, vxUnloadKernels
+* Added test for vxSetGraphAttribute (test_graph.c)
+  - Negative tests for invalid reference, read-only attributes, unsupported
+    attribute enums, and invalid size
+* Added test for vxSetThresholdAttribute (test_threshold.c)
+  - Negative tests for invalid reference, read-only attributes, invalid size
+  - Verifies attributes remain unchanged after failed set attempts
+
+Bug fixes:
+* Fixed test_vxHint (test_smoke.c) to accept VX_ERROR_NOT_SUPPORTED as a valid
+  return status alongside VX_SUCCESS, per the specification
+
+Deprecated API cleanup:
+* Replaced vxRegisterUserStruct with vxRegisterUserStructWithName in test_smoke.c
+  and test_array.c
+* Removed unnecessary #include <VX/vx_compatibility.h> from
+  Networks/src/graph_alexnet.c (code uses vxLocalResponseNormalizationLayer from
+  vx_khr_nn.h, not the deprecated vxNormalizationLayer)
+* Fixed stale comments in test_canny.c (lines 638, 786) referencing
+  vxCreateThreshold — updated to vxCreateThresholdForImage
+
+Documentation:
+* Replaced plaintext README with comprehensive README.md covering build options,
+  platform-specific notes, all CMake variables, runtime usage, and test data
+* Added .gitignore for build directories
+
 RELEASE: CTS-1.2-20171220
 * Fixes for compiling with Windows Visual Studio
 

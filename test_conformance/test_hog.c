@@ -281,7 +281,7 @@ TEST_WITH_ARG(HogCells, testImmediateProcessing, Arg,
     ASSERT_VX_OBJECT(magnitudes = vxCreateTensor(context, 2, mag_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
     ASSERT_VX_OBJECT(bins = vxCreateTensor(context, 3, bins_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
 
-    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_width, bins_num, magnitudes, bins));
+    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_height, bins_num, magnitudes, bins));
     ASSERT_NO_FAILURE(status = hogcells_ref(src, cell_width, cell_height, bins_num, magnitudes, bins));
     EXPECT_EQ_VX_STATUS(VX_SUCCESS, status);
 
@@ -679,7 +679,7 @@ TEST_WITH_ARG(HogFeatures, testImmediateProcessing, Arg_features,
     ASSERT_VX_OBJECT(bins = vxCreateTensor(context, 3, bins_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
     ASSERT_VX_OBJECT(features = vxCreateTensor(context, 3, features_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
 
-    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_width, bins_num, magnitudes, bins));
+    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_height, bins_num, magnitudes, bins));
     VX_CALL(vxuHOGFeatures(context, src_image, magnitudes, bins, &arg_->hog_params, 1, features));
     ASSERT_NO_FAILURE(status = hogfeatures_ref(src, arg_->hog_params, features));
     EXPECT_EQ_VX_STATUS(VX_SUCCESS, status);

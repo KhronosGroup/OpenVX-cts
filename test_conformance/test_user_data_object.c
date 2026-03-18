@@ -23,13 +23,13 @@
 #include <VX/vx_khr_user_data_object.h>
 
 #define VX_KERNEL_CONFORMANCE_TEST_OWN_BAD (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 0)
-#define VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME "org.khronos.openvx.test.own_bad"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.own_bad";
 
 #define VX_KERNEL_CONFORMANCE_TEST_OWN (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 1)
-#define VX_KERNEL_CONFORMANCE_TEST_OWN_NAME "org.khronos.openvx.test.own"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_OWN_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.own";
 
 #define VX_KERNEL_CONFORMANCE_TEST_OWN_USER (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 2)
-#define VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME "org.khronos.openvx.test.own_user"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.own_user";
 
 TESTCASE(UserDataObject, CT_VXContext, ct_setup_vx_context, 0)
 

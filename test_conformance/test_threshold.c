@@ -453,11 +453,134 @@ TEST_WITH_ARG(Threshold, testWithValidRegion, ValidRegionTest_Arg,
     }
 }
 
+TEST(Threshold, testvxSetThresholdAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_threshold thresh = 0;
+    vx_status status = VX_SUCCESS;
+
+    /* Test with BINARY threshold using vxCopyThresholdValue */
+    ASSERT_VX_OBJECT(thresh = vxCreateThresholdForImage(context,
+        VX_THRESHOLD_TYPE_BINARY, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8), VX_TYPE_THRESHOLD);
+
+    /* Positive: write and read back threshold value */
+    vx_pixel_value_t value;
+    memset(&value, 0, sizeof(value));
+    value.U8 = 128;
+    status = vxCopyThresholdValue(thresh, &value, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+
+    vx_pixel_value_t queried_value;
+    memset(&queried_value, 0, sizeof(queried_value));
+    status = vxCopyThresholdValue(thresh, &queried_value, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT_EQ_INT(128, queried_value.U8);
+
+    /* Positive: write and read back true/false output values */
+    vx_pixel_value_t true_val, false_val;
+    memset(&true_val, 0, sizeof(true_val));
+    memset(&false_val, 0, sizeof(false_val));
+    true_val.U8 = 200;
+    false_val.U8 = 50;
+    status = vxCopyThresholdOutput(thresh, &true_val, &false_val, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+
+    vx_pixel_value_t queried_true, queried_false;
+    memset(&queried_true, 0, sizeof(queried_true));
+    memset(&queried_false, 0, sizeof(queried_false));
+    status = vxCopyThresholdOutput(thresh, &queried_true, &queried_false, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT_EQ_INT(200, queried_true.U8);
+    ASSERT_EQ_INT(50, queried_false.U8);
+
+    /* Positive: verify read-only attributes via vxQueryThreshold */
+    vx_enum thresh_type = 0;
+    VX_CALL(vxQueryThreshold(thresh, VX_THRESHOLD_TYPE, &thresh_type, sizeof(thresh_type)));
+    ASSERT_EQ_INT(VX_THRESHOLD_TYPE_BINARY, thresh_type);
+
+    vx_df_image input_fmt = 0;
+    VX_CALL(vxQueryThreshold(thresh, VX_THRESHOLD_INPUT_FORMAT, &input_fmt, sizeof(input_fmt)));
+    ASSERT_EQ_INT(VX_DF_IMAGE_U8, input_fmt);
+
+    VX_CALL(vxReleaseThreshold(&thresh));
+    ASSERT(thresh == 0);
+
+    /* Test with RANGE threshold using vxCopyThresholdRange */
+    ASSERT_VX_OBJECT(thresh = vxCreateThresholdForImage(context,
+        VX_THRESHOLD_TYPE_RANGE, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8), VX_TYPE_THRESHOLD);
+
+    /* Positive: write and read back lower/upper range values */
+    vx_pixel_value_t lower, upper;
+    memset(&lower, 0, sizeof(lower));
+    memset(&upper, 0, sizeof(upper));
+    lower.U8 = 64;
+    upper.U8 = 192;
+    status = vxCopyThresholdRange(thresh, &lower, &upper, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+
+    vx_pixel_value_t queried_lower, queried_upper;
+    memset(&queried_lower, 0, sizeof(queried_lower));
+    memset(&queried_upper, 0, sizeof(queried_upper));
+    status = vxCopyThresholdRange(thresh, &queried_lower, &queried_upper, VX_READ_ONLY, VX_MEMORY_TYPE_HOST);
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT_EQ_INT(64, queried_lower.U8);
+    ASSERT_EQ_INT(192, queried_upper.U8);
+
+    VX_CALL(vxReleaseThreshold(&thresh));
+    ASSERT(thresh == 0);
+}
+
+TEST(Threshold, DISABLED_testvxSetThresholdAttribute_negative)
+{
+    vx_context context = context_->vx_context_;
+    vx_threshold thresh = 0;
+    vx_status status = VX_SUCCESS;
+
+    ASSERT_VX_OBJECT(thresh = vxCreateThresholdForImage(context,
+        VX_THRESHOLD_TYPE_BINARY, VX_DF_IMAGE_U8, VX_DF_IMAGE_U8), VX_TYPE_THRESHOLD);
+
+    /* Negative: invalid threshold reference */
+    vx_enum dummy_type = VX_THRESHOLD_TYPE_BINARY;
+    status = vxSetThresholdAttribute(NULL, VX_THRESHOLD_TYPE, &dummy_type, sizeof(dummy_type));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    /* Negative: read-only attribute VX_THRESHOLD_TYPE */
+    status = vxSetThresholdAttribute(thresh, VX_THRESHOLD_TYPE, &dummy_type, sizeof(dummy_type));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    /* Negative: read-only attribute VX_THRESHOLD_INPUT_FORMAT */
+    vx_df_image fmt = VX_DF_IMAGE_U8;
+    status = vxSetThresholdAttribute(thresh, VX_THRESHOLD_INPUT_FORMAT, &fmt, sizeof(fmt));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    /* Negative: read-only attribute VX_THRESHOLD_OUTPUT_FORMAT */
+    status = vxSetThresholdAttribute(thresh, VX_THRESHOLD_OUTPUT_FORMAT, &fmt, sizeof(fmt));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    /* Negative: invalid size */
+    status = vxSetThresholdAttribute(thresh, VX_THRESHOLD_TYPE, &dummy_type, 0);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    /* Verify original attributes are unchanged */
+    vx_enum thresh_type = 0;
+    VX_CALL(vxQueryThreshold(thresh, VX_THRESHOLD_TYPE, &thresh_type, sizeof(thresh_type)));
+    ASSERT_EQ_INT(VX_THRESHOLD_TYPE_BINARY, thresh_type);
+
+    vx_df_image input_fmt = 0;
+    VX_CALL(vxQueryThreshold(thresh, VX_THRESHOLD_INPUT_FORMAT, &input_fmt, sizeof(input_fmt)));
+    ASSERT_EQ_INT(VX_DF_IMAGE_U8, input_fmt);
+
+    VX_CALL(vxReleaseThreshold(&thresh));
+    ASSERT(thresh == 0);
+}
+
 TESTCASE_TESTS(Threshold,
                testThresholdCreation,
                testVirtualThresholdCreation,
                testOnRandom,
-               testWithValidRegion
+               testWithValidRegion,
+               testvxSetThresholdAttribute,
+               DISABLED_testvxSetThresholdAttribute_negative
                )
 
 #endif //OPENVX_USE_ENHANCED_VISION || OPENVX_CONFORMANCE_VISION

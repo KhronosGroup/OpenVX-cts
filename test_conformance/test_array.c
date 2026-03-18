@@ -382,7 +382,7 @@ TEST_WITH_ARG(Array, test_vxCreateArray, Array_Arg, PARAMETERS)
 
     if (VX_TYPE_USER_STRUCT_START == arg_->item_type)
     {
-        item_type = vxRegisterUserStruct(context, sizeof(own_struct));
+        item_type = vxRegisterUserStructWithName(context, sizeof(own_struct), "own_struct");
         ASSERT(item_type >= VX_TYPE_USER_STRUCT_START && item_type <= VX_TYPE_USER_STRUCT_END);
     }
     else

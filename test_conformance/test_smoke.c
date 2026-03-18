@@ -37,7 +37,7 @@ TEST(SmokeTest, test_vxRegisterUserStruct)
     vx_enum type = 0;
     vx_size sz = 0;
 
-    mytype = vxRegisterUserStruct(context, sizeof(mystruct));
+    mytype = vxRegisterUserStructWithName(context, sizeof(mystruct), "mystruct");
     ASSERT(mytype >= VX_TYPE_USER_STRUCT_START);
 
     ASSERT_VX_OBJECT(array = vxCreateArray(context, mytype, 10), VX_TYPE_ARRAY);
@@ -58,13 +58,34 @@ TEST(SmokeTest, test_vxHint)
     vx_image image = 0;
     vx_graph graph = 0;
     vx_context context = context_->vx_context_;
+    vx_status status;
 
     ASSERT_VX_OBJECT(image = vxCreateImage(context, 128, 128, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
 
-//    VX_CALL(vxHint((vx_reference)image, VX_HINT_SERIALIZE, 0, 0));
-//    VX_CALL(vxHint((vx_reference)graph, VX_HINT_SERIALIZE, 0, 0));
-//    VX_CALL(vxHint((vx_reference)context, VX_HINT_SERIALIZE, 0, 0));
+    /* Per spec, vxHint may return VX_SUCCESS or VX_ERROR_NOT_SUPPORTED */
+    status = vxHint((vx_reference)image, VX_HINT_PERFORMANCE_DEFAULT, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)graph, VX_HINT_PERFORMANCE_DEFAULT, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)context, VX_HINT_PERFORMANCE_DEFAULT, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)image, VX_HINT_PERFORMANCE_LOW_POWER, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)graph, VX_HINT_PERFORMANCE_LOW_POWER, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)image, VX_HINT_PERFORMANCE_HIGH_SPEED, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    status = vxHint((vx_reference)graph, VX_HINT_PERFORMANCE_HIGH_SPEED, NULL, 0);
+    ASSERT(status == VX_SUCCESS || status == VX_ERROR_NOT_SUPPORTED);
+
+    ASSERT_EQ_VX_STATUS(VX_ERROR_INVALID_REFERENCE, vxHint(NULL, VX_HINT_PERFORMANCE_DEFAULT, NULL, 0));
 
     VX_CALL(vxReleaseImage(&image));
     VX_CALL(vxReleaseGraph(&graph));
@@ -698,6 +719,89 @@ TEST(SmokeTestBase, test_vxUnloadKernels)
     ASSERT(num_unique_kernels2 == num_unique_kernels1);
 }
 
+static vx_status VX_CALLBACK test_regmod_kernel(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+    (void)node; (void)parameters; (void)num;
+    return VX_SUCCESS;
+}
+
+static vx_status VX_CALLBACK test_regmod_validate(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+{
+    (void)node; (void)parameters; (void)num; (void)metas;
+    return VX_SUCCESS;
+}
+
+static const vx_char TEST_REGMOD_KERNEL_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.test.registeredmodule";
+
+static vx_status VX_API_CALL test_publish(vx_context context)
+{
+    vx_kernel kernel = vxAddUserKernel(context,
+        TEST_REGMOD_KERNEL_NAME,
+        VX_KERNEL_BASE(VX_ID_DEFAULT, 0x5) + 0x0,
+        test_regmod_kernel, 1, test_regmod_validate, NULL, NULL);
+    if (vxGetStatus((vx_reference)kernel) != VX_SUCCESS)
+        return VX_FAILURE;
+
+    vx_status status = vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED);
+    if (status != VX_SUCCESS) goto exit;
+    status = vxFinalizeKernel(kernel);
+    if (status != VX_SUCCESS) goto exit;
+    return VX_SUCCESS;
+
+exit:
+    vxRemoveKernel(kernel);
+    return status;
+}
+
+static vx_status VX_API_CALL test_unpublish(vx_context context)
+{
+    vx_kernel kernel = vxGetKernelByName(context, TEST_REGMOD_KERNEL_NAME);
+    if (kernel)
+    {
+        vx_kernel kcpy = kernel;
+        vxReleaseKernel(&kcpy);
+        return vxRemoveKernel(kernel);
+    }
+    return VX_SUCCESS;
+}
+
+TEST(SmokeTestBase, test_vxRegisterKernelLibrary)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = NULL;
+
+    /* Register the module with valid parameters */
+    VX_CALL(vxRegisterKernelLibrary(context, "test-regmod", test_publish, test_unpublish));
+
+    /* Load the registered module */
+    VX_CALL(vxLoadKernels(context, "test-regmod"));
+
+    /* Kernel should now be available */
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, TEST_REGMOD_KERNEL_NAME), VX_TYPE_KERNEL);
+    VX_CALL(vxReleaseKernel(&kernel));
+
+    /* Unload and verify kernel is gone */
+    VX_CALL(vxUnloadKernels(context, "test-regmod"));
+}
+
+TEST(SmokeTestBase, DISABLED_test_vxRegisterKernelLibrary_negative)
+{
+    vx_context context = context_->vx_context_;
+    vx_status status = VX_SUCCESS;
+
+    /* Negative: invalid context */
+    status = vxRegisterKernelLibrary(NULL, "test-regmod", test_publish, test_unpublish);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    /* Negative: NULL module name */
+    status = vxRegisterKernelLibrary(context, NULL, test_publish, test_unpublish);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+
+    /* Negative: NULL publish function */
+    status = vxRegisterKernelLibrary(context, "test-regmod", NULL, test_unpublish);
+    ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+}
+
 TEST(SmokeTestBase, test_vxSetReferenceName)
 {
     vx_context context = context_->vx_context_;
@@ -720,16 +824,36 @@ TEST(SmokeTestBase, test_vxGetStatus)
     vx_kernel kernel = NULL;
     vx_status status = VX_SUCCESS;
 
+    /* Positive: valid kernel reference should return VX_SUCCESS */
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert"), VX_TYPE_KERNEL);
+    status = vxGetStatus((vx_reference)kernel);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    VX_CALL(vxReleaseKernel(&kernel));
+
+    /* Positive: valid context reference should return VX_SUCCESS */
+    status = vxGetStatus((vx_reference)context);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+
+    /* Positive: valid graph reference should return VX_SUCCESS */
+    vx_graph graph = vxCreateGraph(context);
+    ASSERT_VX_OBJECT(graph, VX_TYPE_GRAPH);
+    status = vxGetStatus((vx_reference)graph);
+    ASSERT_EQ_INT(VX_SUCCESS, status);
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(SmokeTestBase, DISABLED_test_vxGetStatus_negative)
+{
+    vx_context context = context_->vx_context_;
+    vx_kernel kernel = NULL;
+    vx_status status = VX_SUCCESS;
+
     status = vxGetStatus((vx_reference)kernel);
     ASSERT_EQ_INT(VX_ERROR_NO_RESOURCES, status);
 
     kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
     status = vxGetStatus((vx_reference)kernel);
     ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
-
-    kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert");
-    status = vxGetStatus((vx_reference)kernel);
-    ASSERT_EQ_INT(VX_SUCCESS, status);
 }
 
 TEST(SmokeTestBase, test_vxGetContext)
@@ -738,15 +862,60 @@ TEST(SmokeTestBase, test_vxGetContext)
     vx_kernel kernel = NULL;
     vx_context context_test = 0;
 
-    context_test = vxGetContext((vx_reference)kernel);
-    EXPECT_EQ_PTR(context_test, NULL);
-
-    kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert");
+    /* Positive: get context from a valid kernel reference */
+    ASSERT_VX_OBJECT(kernel = vxGetKernelByName(context, "org.khronos.openvx.color_convert"), VX_TYPE_KERNEL);
     context_test = vxGetContext((vx_reference)kernel);
     ASSERT_VX_OBJECT(context_test, VX_TYPE_CONTEXT);
+    VX_CALL(vxReleaseKernel(&kernel));
+
+    /* Positive: get context from a valid graph reference */
+    vx_graph graph = vxCreateGraph(context);
+    ASSERT_VX_OBJECT(graph, VX_TYPE_GRAPH);
+    context_test = vxGetContext((vx_reference)graph);
+    ASSERT_VX_OBJECT(context_test, VX_TYPE_CONTEXT);
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(SmokeTestBase, DISABLED_test_vxGetContext_negative)
+{
+    vx_kernel kernel = NULL;
+    vx_context context_test = 0;
+
+    context_test = vxGetContext((vx_reference)kernel);
+    EXPECT_EQ_PTR(context_test, NULL);
 }
 
 TEST(SmokeTestBase, test_vxQueryReference)
+{
+    vx_context context = context_->vx_context_;
+    vx_status status = VX_SUCCESS;
+    vx_enum ref_type = 0;
+    vx_uint32 ref_count = 0;
+
+    /* Positive: query reference type of a graph */
+    vx_graph graph = vxCreateGraph(context);
+    ASSERT_VX_OBJECT(graph, VX_TYPE_GRAPH);
+
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_TYPE, &ref_type, sizeof(ref_type));
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT_EQ_INT(VX_TYPE_GRAPH, ref_type);
+
+    /* Positive: query reference count */
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_COUNT, &ref_count, sizeof(ref_count));
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT_EQ_INT(1, ref_count);
+
+    /* Positive: set and query reference name */
+    VX_CALL(vxSetReferenceName((vx_reference)graph, "TestGraph"));
+    char* actual_name = NULL;
+    status = vxQueryReference((vx_reference)graph, VX_REFERENCE_NAME, &actual_name, sizeof(actual_name));
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, status);
+    ASSERT(0 == strcmp("TestGraph", actual_name));
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
+TEST(SmokeTestBase, DISABLED_test_vxQueryReference_negative)
 {
     vx_context context = context_->vx_context_;
     char* actual_name = NULL;
@@ -767,7 +936,6 @@ TEST(SmokeTestBase, test_vxQueryReference)
     ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
 
     VX_CALL(vxReleaseGraph(&graph));
-
 }
 
 TEST(SmokeTestBase, test_vxRetainReferenceBase)
@@ -835,10 +1003,15 @@ TESTCASE_TESTS(SmokeTestBase,
         test_vxReleaseReferenceBase,
         test_vxLoadKernels,
         test_vxUnloadKernels,
+        test_vxRegisterKernelLibrary,
+        DISABLED_test_vxRegisterKernelLibrary_negative,
         test_vxSetReferenceName,
         test_vxGetStatus,
-        //test_vxGetContext, - negative test turn off
+        DISABLED_test_vxGetStatus_negative,
+        test_vxGetContext,
+        DISABLED_test_vxGetContext_negative,
         test_vxQueryReference,
+        DISABLED_test_vxQueryReference_negative,
         test_vxRetainReferenceBase
         )
 

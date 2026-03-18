@@ -635,7 +635,7 @@ TEST_WITH_ARG(vxuCanny, Lena, canny_arg,
 
     ASSERT_VX_OBJECT(hyst = vxCreateThresholdForImage(context, VX_THRESHOLD_TYPE_RANGE, input_format, output_format), VX_TYPE_THRESHOLD);
     VX_CALL(vxCopyThresholdRange(hyst, &low_pixel, &high_pixel, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-    /* FALSE_VALUE and TRUE_VALUE of hyst parameter are set to their default values (0, 255) by vxCreateThreshold */
+    /* FALSE_VALUE and TRUE_VALUE of hyst parameter are set to their default values (0, 255) by vxCreateThresholdForImage */
     /* test reference data are computed with assumption that FALSE_VALUE and TRUE_VALUE set to 0 and 255 */
 
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxuCannyEdgeDetector(context, src, hyst, arg_->grad_size, arg_->norm_type, dst));
@@ -783,7 +783,7 @@ TEST_WITH_ARG(vxCanny, Lena, canny_arg,
 
     ASSERT_VX_OBJECT(hyst = vxCreateThresholdForImage(context, VX_THRESHOLD_TYPE_RANGE, input_format, output_format), VX_TYPE_THRESHOLD);
     VX_CALL(vxCopyThresholdRange(hyst, &low_pixel, &high_pixel, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-    /* FALSE_VALUE and TRUE_VALUE of hyst parameter are set to their default values (0, 255) by vxCreateThreshold */
+    /* FALSE_VALUE and TRUE_VALUE of hyst parameter are set to their default values (0, 255) by vxCreateThresholdForImage */
     /* test reference data are computed with assumption that FALSE_VALUE and TRUE_VALUE set to 0 and 255 */
 
     ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);

@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.10)
 project (networks)
 
 set (OPENVX_LIB_NAME openvx)

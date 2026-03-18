@@ -16,7 +16,7 @@
 #
 
 
-cmake_minimum_required(VERSION 2.8.12) #2.8.11.2 fails
+cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE) #instead of manually added -fPIC
 
@@ -117,14 +117,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_PDB_OUTPUT_DIRECTORY     ${CMAKE_BINARY_DIR}/lib)
 
-if (CMAKE_VERSION VERSION_LESS "3.0.0")
-  if (NOT EXISTS "${CMAKE_BINARY_DIR}/dummy.c")
-    file(WRITE "${CMAKE_BINARY_DIR}/dummy.c" "")
-  endif()
-  add_library(openvx-interface STATIC "${CMAKE_BINARY_DIR}/dummy.c")
-else()
-  add_library(openvx-interface INTERFACE)
-endif()
+add_library(openvx-interface INTERFACE)
 
 if (DEFINED OPENVX_LIBRARIES)
   message(STATUS "OpenVX: Prebuild Version")

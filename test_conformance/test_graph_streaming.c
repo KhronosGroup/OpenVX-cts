@@ -28,13 +28,13 @@
 TESTCASE(GraphStreaming,  CT_VXContext, ct_setup_vx_context, 0)
 
 #define VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE1 (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 3)
-#define VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE1_NAME "org.khronos.openvx.test.user_source_1"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE1_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.user_source_1";
 
 #define VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE2 (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 4)
-#define VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE2_NAME "org.khronos.openvx.test.user_source_2"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_USER_SOURCE2_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.user_source_2";
 
 #define VX_KERNEL_CONFORMANCE_TEST_USER_SINK (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 5)
-#define VX_KERNEL_CONFORMANCE_TEST_USER_SINK_NAME "org.khronos.openvx.test.user_sink"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_USER_SINK_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.user_sink";
 #define PIPEUP_NUM_BUFS 3
 
 typedef enum _own_source_params_e

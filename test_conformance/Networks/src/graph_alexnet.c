@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <VX/vx_khr_nn.h>
-#include <VX/vx_compatibility.h>  // for vxNormalizeLayer
 #include "graph.h"
 
 

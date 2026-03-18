@@ -19,6 +19,8 @@
 
 #include "vx_lib_testmodule.h"
 
+static const vx_char TESTMODULE_KERNEL_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.test.testmodule";
+
 /*! An internal definition of the order of the parameters to the function.
  * This list must match the parameter list in the function and in the
  * publish kernel list.
@@ -225,7 +227,7 @@ vx_status VX_CALLBACK TestModuleDeinitialize(vx_node node, const vx_reference *p
 {
     vx_status status = VX_SUCCESS;
     vx_kernel kernel = vxAddUserKernel(context,
-                                    "org.khronos.test.testmodule",
+                                    TESTMODULE_KERNEL_NAME,
                                     VX_KERNEL_KHR_TESTMODULE,
                                     TestModuleKernel,
                                     4,
@@ -266,7 +268,7 @@ exit:
 /*VX_API_ENTRY*/ vx_status VX_API_CALL vxUnpublishKernels(vx_context context)
 {
     vx_status status = VX_SUCCESS;
-    vx_kernel kernel = vxGetKernelByName(context, "org.khronos.test.testmodule");
+    vx_kernel kernel = vxGetKernelByName(context, TESTMODULE_KERNEL_NAME);
     vx_kernel kernelcpy = kernel;
 
     if (kernel)

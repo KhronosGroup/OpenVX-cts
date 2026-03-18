@@ -38,6 +38,17 @@ add_executable(${target} ${SOURCES} ${HEADERS} ${NETWORK_SOURCES})
 
 target_link_libraries(${target} test_engine openvx-interface)
 
+# Ensure dlopen can find dynamically loaded test modules (e.g., test-testmodule)
+if(APPLE)
+    set(_rpath_origin "@loader_path")
+else()
+    set(_rpath_origin "$ORIGIN")
+endif()
+set_target_properties(${target} PROPERTIES
+    BUILD_RPATH "${CMAKE_BINARY_DIR}/lib"
+    INSTALL_RPATH "${_rpath_origin};${_rpath_origin}/../lib"
+)
+
 set(TESTMODULE_FOLDER TestModule)
 
 add_subdirectory(test_module)

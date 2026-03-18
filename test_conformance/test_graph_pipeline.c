@@ -166,7 +166,7 @@ static void fillSequence(CT_Image dst, uint32_t seq_init)
             dst->data.y[i * dst->stride + j] = val;
 }
 
-#define TEST_USER_KERNEL_NAME          "test_graph_pipeline.user_kernel"
+static const vx_char TEST_USER_KERNEL_NAME[VX_MAX_KERNEL_NAME] = "test_graph_pipeline.user_kernel";
 #define TEST_USER_KERNEL_NUM_PARAMS     (4u)
 static vx_kernel test_user_kernel = NULL;
 

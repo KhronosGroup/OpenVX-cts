@@ -231,7 +231,7 @@ TEST(Graph, testGraphFactory)
     ASSERT(graph == NULL);
 }
 
-#define VX_KERNEL_CONFORMANCE_TEST_TAKE10_NAME "org.khronos.openvx.test.array_take_10"
+static const vx_char VX_KERNEL_CONFORMANCE_TEST_TAKE10_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.array_take_10";
 
 static vx_status VX_CALLBACK take10_ParameterValidator(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
@@ -2771,6 +2771,49 @@ TEST(GraphBase, testvxQueryGraph)
     ct_free_mem(test);
 }
 
+TEST(GraphBase, testvxSetGraphAttribute)
+{
+    vx_context context = context_->vx_context_;
+    vx_context context_test = 0;
+    vx_graph graph = NULL;
+    vx_status status = VX_SUCCESS;
+    vx_uint32 dummy = 0;
+
+    /* Negative: invalid graph reference (created from NULL context) */
+    graph = vxCreateGraph(context_test);
+    status = vxSetGraphAttribute(graph, VX_GRAPH_NUMNODES, &dummy, sizeof(dummy));
+    ASSERT_EQ_INT(VX_ERROR_INVALID_REFERENCE, status);
+
+    /* Create a valid graph */
+    graph = vxCreateGraph(context);
+
+    /* Negative: trying to set read-only attributes should fail */
+    status = vxSetGraphAttribute(graph, VX_GRAPH_NUMNODES, &dummy, sizeof(dummy));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    status = vxSetGraphAttribute(graph, VX_GRAPH_NUMPARAMETERS, &dummy, sizeof(dummy));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    vx_enum state = VX_GRAPH_STATE_UNVERIFIED;
+    status = vxSetGraphAttribute(graph, VX_GRAPH_STATE, &state, sizeof(state));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    vx_perf_t perf;
+    memset(&perf, 0, sizeof(perf));
+    status = vxSetGraphAttribute(graph, VX_GRAPH_PERFORMANCE, &perf, sizeof(perf));
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    /* Negative: unsupported attribute enum */
+    status = vxSetGraphAttribute(graph, VX_GRAPH_STATE_ABANDONED, &dummy, sizeof(dummy));
+    ASSERT_EQ_INT(VX_ERROR_NOT_SUPPORTED, status);
+
+    /* Negative: invalid size */
+    status = vxSetGraphAttribute(graph, VX_GRAPH_NUMNODES, &dummy, 0);
+    ASSERT_NE_VX_STATUS(VX_SUCCESS, status);
+
+    VX_CALL(vxReleaseGraph(&graph));
+}
+
 TEST(GraphBase, testvxWaitGraphBase)
 {
     vx_context context = context_->vx_context_;
@@ -2967,7 +3010,7 @@ TEST_WITH_ARG(GraphEnhanced, testKernelName_enhanced, kernel_name_arg,
 /* *****************UserKernelsOfNNAndNNEF tests*******************************/
 TESTCASE(UserKernelsOfNNAndNNEF, CT_VXContext, ct_setup_vx_context, 0)
 
-#define VX_USER_KERNEL_CONFORMANCE_NAME  "org.khronos.openvx.test.user.kernel.tensor"
+static const vx_char VX_USER_KERNEL_CONFORMANCE_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.user.kernel.tensor";
 #define VX_MAX_TENSOR_DIMENSIONS 6
 #define Q78_FIXED_POINT_POSITION 8
 #define MAX_DIMS_TEST1   4
@@ -4132,6 +4175,7 @@ TESTCASE_TESTS(GraphBase,
         testvxIsGraphVerifiedBase,
         //testvxProcessGraphBase, - negative test turn off
         testvxQueryGraph,
+        testvxSetGraphAttribute,
         //testvxWaitGraphBase, - negative test turn off
         //testvxVerifyGraphBase, - negative test turn off
         //testvxScheduleGraph, - negative test turn off

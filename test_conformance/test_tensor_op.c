@@ -1858,7 +1858,7 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
                 case TT_Q78:
                     {
                         tmp *= Q78_SCALE;
-                        vx_int16 ref = wrap ? (vx_int16)tmp : CLAMP(tmp, INT16_MIN, INT16_MAX); //TODO: cast issue?
+                        vx_int16 ref = wrap ? (vx_int16)tmp : CLAMP(tmp, INT16_MIN, INT16_MAX);
                         vx_int16 res = *(vx_int16*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -1866,7 +1866,7 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
                     break;
                 case TT_U8:
                     {
-                        vx_uint8 ref = wrap ? (vx_uint8)tmp : CLAMP(tmp, 0, UINT8_MAX);  // CLAMP not really needed
+                        vx_uint8 ref = wrap ? (vx_uint8)(vx_int8)tmp : CLAMP(tmp, 0, UINT8_MAX);
                         vx_uint8 res = *(vx_uint8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -1874,7 +1874,7 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
                     break;
                 case TT_S8:
                     {
-                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //TODO: cast issue?
+                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX);
                         vx_int8 res = *(vx_int8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -2067,7 +2067,7 @@ TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_
                 case TT_Q78:
                     {
                         tmp *= Q78_SCALE;
-                        vx_int16 ref = wrap ? (vx_int16)tmp : CLAMP(tmp, INT16_MIN, INT16_MAX); //TODO: cast issue?
+                        vx_int16 ref = wrap ? (vx_int16)tmp : CLAMP(tmp, INT16_MIN, INT16_MAX);
                         vx_int16 res = *(vx_int16*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -2075,7 +2075,7 @@ TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_
                     break;
                 case TT_U8:
                     {
-                        vx_uint8 ref = wrap ? (vx_uint8)tmp : CLAMP(tmp, 0, UINT8_MAX);  // CLAMP not really needed
+                        vx_uint8 ref = wrap ? (vx_uint8)(vx_int8)tmp : CLAMP(tmp, 0, UINT8_MAX);
                         vx_uint8 res = *(vx_uint8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -2083,7 +2083,7 @@ TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_
                     break;
                 case TT_S8:
                     {
-                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //TODO: cast issue?
+                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX);
                         vx_int8 res = *(vx_int8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
