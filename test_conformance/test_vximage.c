@@ -1024,6 +1024,13 @@ TEST_WITH_ARG(Image, testUniformImage, ImageFormat_Arg,
 
     EXPECT_EQ_CTIMAGE(refimg, ctimg);
 
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxQueryImage(image, VX_IMAGE_IS_UNIFORM,  &is_uniform,  sizeof(is_uniform)));
+    ASSERT_EQ_INT((vx_bool)vx_true_e, is_uniform);
+
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxQueryImage(image, VX_IMAGE_UNIFORM_VALUE,  &uniform_value,  sizeof(uniform_value)));
+    /* vals only initialized to first four bytes so can compare with U32 value */
+    ASSERT_EQ_INT(uniform_value.U32, vals.U32);
+
     VX_CALL(vxReleaseImage(&image));
     ASSERT(image == 0);
 } /* testUniformImage() */
@@ -1324,6 +1331,8 @@ TEST(Image, testQueryImage)
     vx_enum space = 0;
     vx_enum range = 0;
     vx_enum memory_type = 0;
+    vx_pixel_value_t uniform_value = {0};
+    vx_bool is_uniform = (vx_bool)vx_true_e;
 
     image = vxCreateImage(context, 640, 480, VX_DF_IMAGE_U8);
 
@@ -1355,6 +1364,11 @@ TEST(Image, testQueryImage)
 */
     ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxQueryImage(image, VX_IMAGE_MEMORY_TYPE,  &memory_type,  sizeof(memory_type)));
     ASSERT_EQ_INT(VX_MEMORY_TYPE_NONE, memory_type);
+
+    ASSERT_EQ_VX_STATUS(VX_SUCCESS, vxQueryImage(image, VX_IMAGE_IS_UNIFORM,  &is_uniform,  sizeof(is_uniform)));
+    ASSERT_EQ_INT((vx_bool)vx_false_e, is_uniform);
+
+    ASSERT_EQ_VX_STATUS(VX_ERROR_NOT_SUPPORTED, vxQueryImage(image, VX_IMAGE_UNIFORM_VALUE,  &uniform_value,  sizeof(uniform_value)));
 
     VX_CALL(vxReleaseImage(&image));
 } /* testQueryImage() */
