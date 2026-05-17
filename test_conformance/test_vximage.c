@@ -407,7 +407,18 @@ TEST_WITH_ARG(Image, testSwapImageHandle, ImageGenerator_Arg,
 
             roi2_rect.start_x = arg_->format == VX_DF_IMAGE_U1 ? ((roi1_width / 2 + 7) / 8 ) * 8 : roi1_width / 2;
             roi2_rect.start_y = roi1_height / 2;
-            roi2_rect.end_x   = roi1_width;
+            /* Ensure end_x > start_x to satisfy spec requirement start < end */
+            /* For U1 images, clamp start_x to ensure valid byte-aligned ROI */
+            if (arg_->format == VX_DF_IMAGE_U1)
+            {
+                /* U1: ensure start_x is byte-aligned and strictly less than roi1_width */
+                roi2_rect.start_x = (roi2_rect.start_x < (vx_uint32)roi1_width) ? roi2_rect.start_x : ((roi1_width > 8) ? ((roi1_width / 2 + 7) / 8) * 8 : 0);
+                roi2_rect.end_x = roi1_width;
+            }
+            else
+            {
+                roi2_rect.end_x = roi1_width > roi2_rect.start_x ? roi1_width : roi2_rect.start_x + 1;
+            }
             roi2_rect.end_y   = roi1_height;
 
             /* second level subimage */
@@ -924,6 +935,8 @@ TEST_WITH_ARG(Image, testUniformImage, ImageFormat_Arg,
     int i;
 
     vx_pixel_value_t vals;
+    vx_pixel_value_t uniform_value = {0};
+    vx_bool is_uniform = (vx_bool)vx_false_e;
 
     vals.reserved[0] = 0x11;
     vals.reserved[1] = 0x22;
@@ -1275,7 +1288,7 @@ TEST(Image, testAccessCopyWriteUniformImage)
     roi_addr.stride_y = roi_width;
 
     vx_uint8 *internal_data = NULL;
-    vx_uint8 *external_data = (vx_uint8 *)ct_alloc_mem(roi_width * roi_height * sizeof(vx_uint8));
+    vx_uint8 *external_data = (vx_uint8 *)ct_alloc_mem(width * height * sizeof(vx_uint8));
 
     ASSERT_VX_OBJECT(image = vxCreateUniformImage(context, width, height, VX_DF_IMAGE_U8, &vals), VX_TYPE_IMAGE);
     ASSERT_VX_OBJECT(roi_image = vxCreateImageFromROI(image, &roi_rect), VX_TYPE_IMAGE);

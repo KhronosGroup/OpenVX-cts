@@ -21,6 +21,7 @@
 #include <VX/vx.h>
 #include <VX/vxu.h>
 #include <VX/vx_khr_user_data_object.h>
+#include <string.h>
 
 #define VX_KERNEL_CONFORMANCE_TEST_OWN_BAD (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 0)
 static const vx_char VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME[VX_MAX_KERNEL_NAME] = "org.khronos.openvx.test.own_bad";

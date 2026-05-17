@@ -128,6 +128,25 @@ static CT_INLINE int_fast32_t ownApplyWrapRoundingToAccum(
     return ownWrapOrSat(fmt, val, wrap);
 }
 
+// 64-bit variant for safe accumulation without int32 overflow.
+static CT_INLINE int_fast32_t ownApplyWrapRoundingToAccum64(
+        enum TestTensorDF fmt, int_fast64_t val,
+        bool wrap,
+        bool to_ne)
+{
+    if (fmt == TT_Q78)
+    {
+       if (to_ne)
+       {
+           val += Q78_HALF;
+       }
+
+       val /= Q78_SCALE;
+    }
+
+    return ownWrapOrSat(fmt, (int_fast32_t)val, wrap);
+}
+
 static CT_INLINE float ownUnquantize(enum TestTensorDF fmt, int_fast32_t val)
 {
     return fmt == TT_Q78 ? ((float)val / Q78_SCALE) : val;
