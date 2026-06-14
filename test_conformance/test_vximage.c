@@ -408,7 +408,17 @@ TEST_WITH_ARG(Image, testSwapImageHandle, ImageGenerator_Arg,
             roi2_rect.start_x = arg_->format == VX_DF_IMAGE_U1 ? ((roi1_width / 2 + 7) / 8 ) * 8 : roi1_width / 2;
             roi2_rect.start_y = roi1_height / 2;
             /* Ensure end_x > start_x to satisfy spec requirement start < end */
-            roi2_rect.end_x   = roi1_width > roi2_rect.start_x ? roi1_width : roi2_rect.start_x + 1;
+            /* For U1 images, clamp start_x to ensure valid byte-aligned ROI */
+            if (arg_->format == VX_DF_IMAGE_U1)
+            {
+                /* U1: ensure start_x is byte-aligned and strictly less than roi1_width */
+                roi2_rect.start_x = (roi2_rect.start_x < (vx_uint32)roi1_width) ? roi2_rect.start_x : ((roi1_width > 8) ? ((roi1_width / 2 + 7) / 8) * 8 : 0);
+                roi2_rect.end_x = roi1_width;
+            }
+            else
+            {
+                roi2_rect.end_x = roi1_width > roi2_rect.start_x ? roi1_width : roi2_rect.start_x + 1;
+            }
             roi2_rect.end_y   = roi1_height;
 
             /* second level subimage */

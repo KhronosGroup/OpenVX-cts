@@ -173,7 +173,8 @@ static void ownConvolution(
                 }
             }
         }
-        sum = ownWrapOrSat(fmt, sum, wrap);
+        // Apply wrap/round and scaling after all channels accumulated
+        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
 
         // The step here could be added to the loops instead of recalcing
         // if, but does the compiler fail to hoist them out???
@@ -615,7 +616,8 @@ static void ownFullyConnected(
             sum += i_val * w_val;
         }
 
-        sum = ownWrapOrSat(fmt, sum, wrap);
+        // Apply wrap/round and scaling after all channels accumulated
+        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
 
         const size_t output_byte_offset =
             (batch_dim_num > 2 ? output.strides[3] * b2 : 0) +
@@ -1992,6 +1994,10 @@ TEST_WITH_ARG(TensorNN, testROIPoolingLayer, test_roi_pooling_arg,
         ARG("Q78", TT_Q78, false),
         ARG("U8", TT_U8, false),
         ARG("S8", TT_S8, false),
+
+        ARG("Q78_Batching", TT_Q78, true),
+        ARG("U8_Batching", TT_U8, true),
+        ARG("S8_Batching", TT_S8, true),
 )
 {
     assert(arg_->fmt == TT_Q78 || arg_->fmt == TT_U8 || arg_->fmt == TT_S8);

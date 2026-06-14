@@ -149,11 +149,19 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
 
             vx_int32 cellx = i / cell_width;
             vx_int32 celly = j / cell_height;
-            vx_int32 magnitudes_index = celly * num_cellw + cellx;
-            vx_int32 bins_index = (celly * num_cellw + cellx) * bins_num + bin;
-            // Apply Q7.8 scaling for INT16 tensor output
-            *(mag_ref + magnitudes_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
-            *(bins_ref + bins_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
+            // Guard against out-of-bounds for non-multiple dimensions
+            if (cellx >= (vx_int32)num_cells_w || celly >= (vx_int32)num_cells_h)
+                continue;
+            vx_int32 magnitudes_index = celly * (vx_int32)num_cells_w + cellx;
+            vx_int32 bins_index = (celly * (vx_int32)num_cells_w + cellx) * bins_num + bin;
+            // Apply Q7.8 scaling for INT16 tensor output with saturation
+            {
+                vx_float32 scaled = (magnitude / (cell_width * cell_height)) * powf(2, 8);
+                vx_int32 accum_mag = (vx_int32)(*(mag_ref + magnitudes_index)) + (vx_int32)scaled;
+                vx_int32 accum_bin = (vx_int32)(*(bins_ref + bins_index)) + (vx_int32)scaled;
+                *(mag_ref + magnitudes_index) = (vx_int16)CLAMP(accum_mag, INT16_MIN, INT16_MAX);
+                *(bins_ref + bins_index) = (vx_int16)CLAMP(accum_bin, INT16_MIN, INT16_MAX);
+            }
         }
     }
     for (vx_size i = 0; i < num_cells_h * num_cells_w; i++)
@@ -449,11 +457,19 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
 
             vx_int32 cellx = i / cell_width;
             vx_int32 celly = j / cell_height;
-            vx_int32 magnitudes_index = celly * num_cellw + cellx;
-            vx_int32 bins_index = (celly * num_cellw + cellx) * bins_num + bin;
-            // Apply Q7.8 scaling for INT16 tensor output
-            *(mag_ref + magnitudes_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
-            *(bins_ref + bins_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
+            // Guard against out-of-bounds for non-multiple dimensions
+            if (cellx >= (vx_int32)num_cells_w || celly >= (vx_int32)num_cells_h)
+                continue;
+            vx_int32 magnitudes_index = celly * (vx_int32)num_cells_w + cellx;
+            vx_int32 bins_index = (celly * (vx_int32)num_cells_w + cellx) * bins_num + bin;
+            // Apply Q7.8 scaling for INT16 tensor output with saturation
+            {
+                vx_float32 scaled = (magnitude / (cell_width * cell_height)) * powf(2, 8);
+                vx_int32 accum_mag = (vx_int32)(*(mag_ref + magnitudes_index)) + (vx_int32)scaled;
+                vx_int32 accum_bin = (vx_int32)(*(bins_ref + bins_index)) + (vx_int32)scaled;
+                *(mag_ref + magnitudes_index) = (vx_int16)CLAMP(accum_mag, INT16_MIN, INT16_MAX);
+                *(bins_ref + bins_index) = (vx_int16)CLAMP(accum_bin, INT16_MIN, INT16_MAX);
+            }
         }
     }
     // The below for-loop implements the following for each window:

@@ -800,7 +800,7 @@ TEST_WITH_ARG(LaplacianPyramid, testGraphProcessing, Arg, LAPLACIAN_PYRAMID_PARA
         {
             for (int x = 0; x < (int)input->width; x++)
             {
-                modified->data[y * modified->stride + x] = ~input->data[y * input->stride + x];
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
             }
         }
         vx_image mod_src = ct_image_to_vx_image(modified, context);
@@ -1144,7 +1144,7 @@ TEST_WITH_ARG(LaplacianReconstruct, testGraphProcessing, Arg, LAPLACIAN_RECONSTR
         {
             for (int x = 0; x < (int)input->width; x++)
             {
-                modified->data[y * modified->stride + x] = ~input->data[y * input->stride + x];
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
             }
         }
         vx_image mod_src = ct_image_to_vx_image(modified, context);

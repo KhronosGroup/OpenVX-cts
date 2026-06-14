@@ -148,7 +148,6 @@ TEST(TargetBase, testvxQueryContext)
     ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
 
     {
-        vx_size size = 0;
         status = vxQueryContext(context, VX_CONTEXT_IMPLEMENTATION, (void*)test, VX_MAX_IMPLEMENTATION_NAME);
         ASSERT_EQ_INT(VX_SUCCESS, status);
         status = vxQueryContext(context, VX_CONTEXT_IMPLEMENTATION, NULL, 0);
@@ -159,10 +158,14 @@ TEST(TargetBase, testvxQueryContext)
         vx_size size = 0;
         status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS_SIZE, (void*)&size, sizeof(vx_size));
         ASSERT_EQ_INT(VX_SUCCESS, status);
-        status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, test, size);
-        ASSERT_EQ_INT(VX_SUCCESS, status);
-        status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, NULL, size);
-        ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+        {
+            char *ext_buf = (char*)ct_alloc_mem(size);
+            status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, ext_buf, size);
+            ASSERT_EQ_INT(VX_SUCCESS, status);
+            status = vxQueryContext(context, VX_CONTEXT_EXTENSIONS, NULL, size);
+            ASSERT_EQ_INT(VX_ERROR_INVALID_PARAMETERS, status);
+            ct_free_mem(ext_buf);
+        }
     }
 
     status = vxQueryContext(context, VX_CONTEXT_CONVOLUTION_MAX_DIMENSION, test, sizeof(vx_size));
