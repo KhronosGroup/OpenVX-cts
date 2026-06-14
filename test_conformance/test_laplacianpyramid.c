@@ -793,6 +793,22 @@ TEST_WITH_ARG(LaplacianPyramid, testGraphProcessing, Arg, LAPLACIAN_PYRAMID_PARA
     own_laplacian_pyramid_reference(context, border, src, ref_pyr, ref_dst);
     own_laplacian_pyramid_openvx(context, border, src, tst_pyr, tst_dst);
 
+    // Modify input and run graph a second time to detect stale-output bugs
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        for (int y = 0; y < (int)input->height; y++)
+        {
+            for (int x = 0; x < (int)input->width; x++)
+            {
+                modified->data[y * modified->stride + x] = ~input->data[y * input->stride + x];
+            }
+        }
+        vx_image mod_src = ct_image_to_vx_image(modified, context);
+        own_laplacian_pyramid_openvx(context, border, mod_src, tst_pyr, tst_dst);
+        vxReleaseImage(&mod_src);
+        ct_free_image(modified);
+    }
+
     {
         CT_Image ct_ref_dst = 0;
         CT_Image ct_tst_dst = 0;
@@ -1118,6 +1134,24 @@ TEST_WITH_ARG(LaplacianReconstruct, testGraphProcessing, Arg, LAPLACIAN_RECONSTR
     own_laplacian_pyramid_reference(context, build_border, src, ref_pyr, ref_lowest_res);
     own_laplacian_reconstruct_reference(context, build_border, ref_pyr, ref_lowest_res, ref_dst);
     own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
+
+    // Modify input and run graph a second time to detect stale-output bugs
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        for (int y = 0; y < (int)input->height; y++)
+        {
+            for (int x = 0; x < (int)input->width; x++)
+            {
+                modified->data[y * modified->stride + x] = ~input->data[y * input->stride + x];
+            }
+        }
+        vx_image mod_src = ct_image_to_vx_image(modified, context);
+        // Rebuild pyramid with modified input
+        own_laplacian_pyramid_reference(context, build_border, mod_src, ref_pyr, ref_lowest_res);
+        own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
+        vxReleaseImage(&mod_src);
+        ct_free_image(modified);
+    }
 
     {
         CT_Image ct_ref_dst = 0;

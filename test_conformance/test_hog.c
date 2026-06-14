@@ -91,16 +91,18 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
 
     width = img->width;
     height = img->height;
-    vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
-    vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    vx_int16* mag = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
-    vx_int16* bins_p = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
-    memset(mag_ref, 0, height / cell_height * width / cell_width * sizeof(vx_int16));
-    memset(bins_ref, 0, height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
+    vx_size num_cells_w = (vx_size)floor((vx_float64)width / cell_width);
+    vx_size num_cells_h = (vx_size)floor((vx_float64)height / cell_height);
+    vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * sizeof(vx_int16));
+    vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * bins_num * sizeof(vx_int16));
+    vx_int16* mag = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * sizeof(vx_int16));
+    vx_int16* bins_p = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * bins_num * sizeof(vx_int16));
+    memset(mag_ref, 0, num_cells_h * num_cells_w * sizeof(vx_int16));
+    memset(bins_ref, 0, num_cells_h * num_cells_w * bins_num * sizeof(vx_int16));
     vx_float32 num_div_360 = (vx_float32)bins_num / 360.0f;
 
-    vx_size magnitudes_dim_num = 2, magnitudes_dims[6] = { width / cell_width, height / cell_height,0 }, magnitudes_strides[6] = { 0 };
-    vx_size bins_dim_num = 3, bins_dims[6] = { width / cell_width, height / cell_height, bins_num }, bins_strides[6] = { 0 };
+    vx_size magnitudes_dim_num = 2, magnitudes_dims[6] = { num_cells_w, num_cells_h, 0 }, magnitudes_strides[6] = { 0 };
+    vx_size bins_dim_num = 3, bins_dims[6] = { num_cells_w, num_cells_h, bins_num }, bins_strides[6] = { 0 };
     magnitudes_strides[0] = 2;
     bins_strides[0] = 2;
 
@@ -149,11 +151,12 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
             vx_int32 celly = j / cell_height;
             vx_int32 magnitudes_index = celly * num_cellw + cellx;
             vx_int32 bins_index = (celly * num_cellw + cellx) * bins_num + bin;
-            *(mag_ref + magnitudes_index) += magnitude / (cell_width * cell_height);
-            *(bins_ref + bins_index) += magnitude / (cell_width * cell_height);
+            // Apply Q7.8 scaling for INT16 tensor output
+            *(mag_ref + magnitudes_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
+            *(bins_ref + bins_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
         }
     }
-    for (vx_int32 i = 0; i < height / cell_height * width / cell_width; i++)
+    for (vx_int32 i = 0; i < num_cells_h * num_cells_w; i++)
     {
         vx_float32 mag_ref_data = *(mag_ref + i);
         vx_float32 mag_data = *(mag + i);
@@ -165,7 +168,7 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
     }
     if (status == VX_SUCCESS)
     {
-        for (vx_int32 i = 0; i < height / cell_height * width / cell_width * bins_num; i++)
+        for (vx_int32 i = 0; i < num_cells_h * num_cells_w * bins_num; i++)
         {
             vx_float32 bins_ref_data = *(bins_ref + i);
             vx_float32 bins_data = *(bins_p + i);
@@ -224,8 +227,8 @@ TEST_WITH_ARG(HogCells, testGraphProcessing, Arg,
     src_width = src->width;
     src_height = src->height;
 
-    const vx_size mag_dims[2] = { src_width / cell_width, src_height / cell_height };
-    const vx_size bins_dims[3] = { src_width / cell_width, src_height / cell_height, bins_num };
+    const vx_size mag_dims[2] = { (vx_size)floor((vx_float64)src_width / cell_width), (vx_size)floor((vx_float64)src_height / cell_height) };
+    const vx_size bins_dims[3] = { (vx_size)floor((vx_float64)src_width / cell_width), (vx_size)floor((vx_float64)src_height / cell_height), bins_num };
     vx_tensor magnitudes;
     vx_tensor bins;
 
@@ -272,8 +275,8 @@ TEST_WITH_ARG(HogCells, testImmediateProcessing, Arg,
     src_width = src->width;
     src_height = src->height;
 
-    const vx_size mag_dims[2] = { src_width / cell_width, src_height / cell_height };
-    const vx_size bins_dims[3] = { src_width / cell_width, src_height / cell_height, bins_num };
+    const vx_size mag_dims[2] = { (vx_size)floor((vx_float64)src_width / cell_width), (vx_size)floor((vx_float64)src_height / cell_height) };
+    const vx_size bins_dims[3] = { (vx_size)floor((vx_float64)src_width / cell_width), (vx_size)floor((vx_float64)src_height / cell_height), bins_num };
     vx_tensor magnitudes;
     vx_tensor bins;
 
@@ -281,7 +284,7 @@ TEST_WITH_ARG(HogCells, testImmediateProcessing, Arg,
     ASSERT_VX_OBJECT(magnitudes = vxCreateTensor(context, 2, mag_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
     ASSERT_VX_OBJECT(bins = vxCreateTensor(context, 3, bins_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
 
-    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_width, bins_num, magnitudes, bins));
+    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_height, bins_num, magnitudes, bins));
     ASSERT_NO_FAILURE(status = hogcells_ref(src, cell_width, cell_height, bins_num, magnitudes, bins));
     EXPECT_EQ_VX_STATUS(VX_SUCCESS, status);
 
@@ -378,25 +381,27 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
     vx_int32 cell_width = params.cell_width;
     vx_int32 bins_num = params.num_bins;
 
-    vx_int32 num_windowsW = width / params.window_width;
-    vx_int32 num_windowsH = height / params.window_height;
-    vx_int32 num_blockW = width / params.cell_width - 1;
-    vx_int32 num_blockH = height / params.cell_height - 1;
-    vx_int32 n_cellsx = width / cell_width;
+    vx_int32 num_windowsW = (vx_int32)floor((vx_float64)width / params.window_width);
+    vx_int32 num_windowsH = (vx_int32)floor((vx_float64)height / params.window_height);
+    vx_int32 num_blockW = (vx_int32)floor((vx_float64)width / params.cell_width) - 1;
+    vx_int32 num_blockH = (vx_int32)floor((vx_float64)height / params.cell_height) - 1;
+    vx_int32 n_cellsx = (vx_int32)floor((vx_float64)width / cell_width);
     vx_int32 cells_per_block_w = params.block_width / cell_width;
     vx_int32 cells_per_block_h = params.block_height / cell_height;
     vx_int32 blocks_per_window_w = (params.window_width - params.block_width) / params.block_stride + 1;
     vx_int32 blocks_per_window_h = (params.window_height - params.block_height) / params.block_stride + 1;
 
-    vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * sizeof(vx_int16));
-    vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(height / cell_height * width / cell_width * bins_num * sizeof(vx_int16));
+    vx_size num_cells_h = (vx_size)floor((vx_float64)height / cell_height);
+    vx_size num_cells_w = (vx_size)floor((vx_float64)width / cell_width);
+    vx_int16* mag_ref = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * sizeof(vx_int16));
+    vx_int16* bins_ref = (vx_int16 *)ct_alloc_mem(num_cells_h * num_cells_w * bins_num * sizeof(vx_int16));
     vx_size features_dim_num = 3;
 
     vx_size features_dims[3] = { (width - params.window_width) / params.window_stride + 1,
                                  (height - params.window_height) / params.window_stride + 1,
                                  ((params.window_width - params.block_width) / params.block_stride + 1) *
                                  ((params.window_height - params.block_height) / params.block_stride + 1) *
-                                 (params.block_width * params.block_height) / (cell_width * cell_height) * bins_num };
+                                 ((params.block_width / cell_width) * (params.block_height / cell_height)) * bins_num };
 
     vx_size features_strides[3] = { sizeof(vx_int16), sizeof(vx_int16) *features_dims[0] , sizeof(vx_int16) *features_dims[0] * features_dims[1] };
     vx_size tensor_data_len = features_dims[0] * features_dims[1] * features_dims[2] * sizeof(vx_int16);
@@ -404,8 +409,8 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
     vx_int16* features_p = (vx_int16 *)ct_alloc_mem(tensor_data_len);
     vx_int16* features_ref = (vx_int16 *)ct_alloc_mem(tensor_data_len);
 
-    memset(mag_ref, 0, (height / cell_height) * (width / cell_width) * sizeof(vx_int16));
-    memset(bins_ref, 0, (height / cell_height) * (width / cell_width) * bins_num * sizeof(vx_int16));
+    memset(mag_ref, 0, num_cells_h * num_cells_w * sizeof(vx_int16));
+    memset(bins_ref, 0, num_cells_h * num_cells_w * bins_num * sizeof(vx_int16));
     memset(features_ref, 0, tensor_data_len);
 
     vx_float32 num_div_360 = (vx_float32)bins_num / 360.0f;
@@ -446,8 +451,9 @@ static vx_status hogfeatures_ref(CT_Image img, vx_hog_t params, vx_tensor featur
             vx_int32 celly = j / cell_height;
             vx_int32 magnitudes_index = celly * num_cellw + cellx;
             vx_int32 bins_index = (celly * num_cellw + cellx) * bins_num + bin;
-            *(mag_ref + magnitudes_index) += magnitude / (cell_width * cell_height);
-            *(bins_ref + bins_index) += magnitude / (cell_width * cell_height);
+            // Apply Q7.8 scaling for INT16 tensor output
+            *(mag_ref + magnitudes_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
+            *(bins_ref + bins_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
         }
     }
     // The below for-loop implements the following for each window:
@@ -679,7 +685,7 @@ TEST_WITH_ARG(HogFeatures, testImmediateProcessing, Arg_features,
     ASSERT_VX_OBJECT(bins = vxCreateTensor(context, 3, bins_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
     ASSERT_VX_OBJECT(features = vxCreateTensor(context, 3, features_dims, VX_TYPE_INT16, 8), VX_TYPE_TENSOR);
 
-    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_width, bins_num, magnitudes, bins));
+    VX_CALL(vxuHOGCells(context, src_image, cell_width, cell_height, bins_num, magnitudes, bins));
     VX_CALL(vxuHOGFeatures(context, src_image, magnitudes, bins, &arg_->hog_params, 1, features));
     ASSERT_NO_FAILURE(status = hogfeatures_ref(src, arg_->hog_params, features));
     EXPECT_EQ_VX_STATUS(VX_SUCCESS, status);

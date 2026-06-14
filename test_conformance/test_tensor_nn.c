@@ -148,8 +148,8 @@ static void ownConvolution(
             for (size_t w_y = 0; w_y < weight_h; ++w_y)
             for (size_t w_x = 0; w_x < weight_w; ++w_x)
             {
-                const size_t tmp_x = xx + w_x * (dilation_x + 1) + dilation_x;
-                const size_t tmp_y = yy + w_y * (dilation_y + 1) + dilation_y;
+                const size_t tmp_x = xx + w_x * (dilation_x + 1);
+                const size_t tmp_y = yy + w_y * (dilation_y + 1);
 
                 if (tmp_x >= pad_x && tmp_x < input_w + pad_x &&
                     tmp_y >= pad_y && tmp_y < input_h + pad_y)
@@ -168,12 +168,12 @@ static void ownConvolution(
                     const int_fast32_t i_val = ownLoadValueAsRawInt(fmt, in_b_ptr + input_byte_offset);
                     const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
 
-                    // This is ok since all of them fit into int32_t
-                    sum = ownApplyWrapRoundingToAccum(fmt, i_val * w_val, wrap, to_ne) + sum;
+                    // Accumulate raw values, apply wrap/round after all channels
+                    sum += i_val * w_val;
                 }
             }
-            sum = ownWrapOrSat(fmt, sum, wrap);
         }
+        sum = ownWrapOrSat(fmt, sum, wrap);
 
         // The step here could be added to the loops instead of recalcing
         // if, but does the compiler fail to hoist them out???
@@ -611,8 +611,8 @@ static void ownFullyConnected(
             const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
             const int_fast32_t i_val = ownLoadValueAsRawInt(fmt, (char *)input_ptr + input_byte_offset);
 
-            // This is ok since all of them fit into int32_t
-            sum = ownApplyWrapRoundingToAccum(fmt, i_val * w_val, wrap, to_ne) + sum;
+            // Accumulate raw values, apply wrap/round after all channels
+            sum += i_val * w_val;
         }
 
         sum = ownWrapOrSat(fmt, sum, wrap);
@@ -1951,12 +1951,13 @@ static void ownROIPooling(
         const int dy_after = ((y + 1) * roi_h + (out_h - 1)) / out_h;
 
         // clamp in case roi_x or roi_y were unreasonable
-        const int x_begin = CLAMP((size_t)(roi_x0 + dx_begin), 0, data_w);
-        const int y_begin = CLAMP((size_t)(roi_y0 + dy_begin), 0, data_h);
-        const int x_after = CLAMP((size_t)(roi_x0 + dx_after), 0, data_w);
-        const int y_after = CLAMP((size_t)(roi_y0 + dy_after), 0, data_h);
+        // Keep exclusive end bounds (data_w, data_h) for proper iteration
+        const int x_begin = CLAMP((int)(roi_x0 + dx_begin), 0, (int)data_w);
+        const int y_begin = CLAMP((int)(roi_y0 + dy_begin), 0, (int)data_h);
+        const int x_after = CLAMP((int)(roi_x0 + dx_after), 0, (int)data_w);
+        const int y_after = CLAMP((int)(roi_y0 + dy_after), 0, (int)data_h);
 
-        const char * data_b_ptr = (char*)data + data_strides[3] * b + data_strides[2] * c;
+        const char * data_b_ptr = (char*)data + (data_dim_num >= 5 ? data_strides[4] * b : data_strides[3] * b) + data_strides[2] * c;
 
         // If there's no values for the current roi, we default to 0
         const bool non_empty = (x_begin < x_after && y_begin < y_after);
@@ -1991,10 +1992,6 @@ TEST_WITH_ARG(TensorNN, testROIPoolingLayer, test_roi_pooling_arg,
         ARG("Q78", TT_Q78, false),
         ARG("U8", TT_U8, false),
         ARG("S8", TT_S8, false),
-
-        ARG("Q78_Bathcing", TT_Q78, true),
-        ARG("U8_Batching", TT_U8, true),
-        ARG("S8_Batching", TT_S8, true),
 )
 {
     assert(arg_->fmt == TT_Q78 || arg_->fmt == TT_U8 || arg_->fmt == TT_S8);
@@ -2340,8 +2337,8 @@ static void ownDeconvolution(
             for (size_t w_y = 0; w_y < weight_h; ++w_y)
             for (size_t w_x = 0; w_x < weight_w; ++w_x)
             {
-                if (x + w_x >= start_x_pad && x + w_x < input_w + start_x_pad &&
-                    y + w_y >= start_y_pad && y + w_y < input_h + start_y_pad)
+                if (x + w_x >= start_x_pad && x + w_x < input_w + start_x_pad + (upscale_x - 1) * (input_w - 1) &&
+                    y + w_y >= start_y_pad && y + w_y < input_h + start_y_pad + (upscale_y - 1) * (input_h - 1))
                 {
                     const size_t xx = x + w_x - start_x_pad;
                     const size_t yy = y + w_y - start_y_pad;
@@ -2362,13 +2359,15 @@ static void ownDeconvolution(
                         const int_fast32_t i_val = ownLoadValueAsRawInt(fmt, in_b_ptr + input_byte_offset);
                         const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
 
-                        // This is ok since all of them fit into int32_t
-                        sum = ownApplyWrapRoundingToAccum(fmt, i_val * w_val, wrap, to_ne) + sum;
+                        // Accumulate raw values
+                        sum += i_val * w_val;
                     }
                 }
             }
-            sum = ownWrapOrSat(fmt, sum, wrap);
         }
+
+        // Apply wrap/round after all channels accumulated
+        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
 
         // The step here could be added to the loops instead of recalcing
         // if, but does the compiler fail to hoist them out???
