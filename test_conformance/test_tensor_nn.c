@@ -129,7 +129,7 @@ static void ownConvolution(
     for (size_t y = 0; y < output_h; ++y)
     for (size_t x = 0; x < output_w; ++x)
     {
-        int32_t sum = 0;
+        int_fast64_t sum = 0;
         if (bias_present)
         {
             const size_t bias_byte_offset =
@@ -168,13 +168,13 @@ static void ownConvolution(
                     const int_fast32_t i_val = ownLoadValueAsRawInt(fmt, in_b_ptr + input_byte_offset);
                     const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
 
-                    // Accumulate raw values, apply wrap/round after all channels
-                    sum += i_val * w_val;
+                    // Accumulate raw values in 64-bit to avoid overflow
+                    sum += (int_fast64_t)i_val * (int_fast64_t)w_val;
                 }
             }
         }
         // Apply wrap/round and scaling after all channels accumulated
-        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
+        sum = ownApplyWrapRoundingToAccum64(fmt, sum, wrap, to_ne);
 
         // The step here could be added to the loops instead of recalcing
         // if, but does the compiler fail to hoist them out???
@@ -576,7 +576,7 @@ static void ownFullyConnected(
     for (size_t b0 = 0; b0 < tmp_batch_dims[0]; ++b0)
     for (size_t ofm = 0; ofm < ofm_num; ++ofm)
     {
-        int_fast32_t sum =
+        int_fast64_t sum =
             bias_present ? ownLoadValueAsRawInt(fmt, (char *)bias_ptr + bias.strides[0] * ofm) : 0;
 
         for (size_t ifm = 0; ifm < tmp_input_dims[2]; ++ifm)
@@ -612,12 +612,12 @@ static void ownFullyConnected(
             const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
             const int_fast32_t i_val = ownLoadValueAsRawInt(fmt, (char *)input_ptr + input_byte_offset);
 
-            // Accumulate raw values, apply wrap/round after all channels
-            sum += i_val * w_val;
+            // Accumulate raw values in 64-bit to avoid overflow
+            sum += (int_fast64_t)i_val * (int_fast64_t)w_val;
         }
 
         // Apply wrap/round and scaling after all channels accumulated
-        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
+        sum = ownApplyWrapRoundingToAccum64(fmt, sum, wrap, to_ne);
 
         const size_t output_byte_offset =
             (batch_dim_num > 2 ? output.strides[3] * b2 : 0) +
@@ -2327,7 +2327,7 @@ static void ownDeconvolution(
     for (size_t y = 0; y < output_h; ++y)
     for (size_t x = 0; x < output_w; ++x)
     {
-        int32_t sum = 0;
+        int_fast64_t sum = 0;
         if (bias_present)
         {
             const size_t bias_byte_offset =
@@ -2366,14 +2366,14 @@ static void ownDeconvolution(
                         const int_fast32_t w_val = ownLoadValueAsRawInt(fmt, (char *)weight_ptr + weight_byte_offset);
 
                         // Accumulate raw values
-                        sum += i_val * w_val;
+                        sum += (int_fast64_t)i_val * (int_fast64_t)w_val;
                     }
                 }
             }
         }
 
         // Apply wrap/round after all channels accumulated
-        sum = ownApplyWrapRoundingToAccum(fmt, sum, wrap, to_ne);
+        sum = ownApplyWrapRoundingToAccum64(fmt, sum, wrap, to_ne);
 
         // The step here could be added to the loops instead of recalcing
         // if, but does the compiler fail to hoist them out???
