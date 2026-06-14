@@ -666,7 +666,9 @@ typedef struct {
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 0 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=1", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 1 }} })), \
     CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=127", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 127 }} })), \
-    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} }))
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT=255", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ 255 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT_S16=0", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ .S16 = 0 }} })), \
+    CT_EXPAND(nextmacro(testArgName "/VX_BORDER_CONSTANT_S16=32767", __VA_ARGS__, { VX_BORDER_CONSTANT, {{ .S16 = 32767 }} }))
 
 #define BILATERAL_CHANNEL(testArgName, nextmacro, ...) \
     CT_EXPAND(nextmacro(testArgName "/channel=1", __VA_ARGS__, 1)), \
@@ -965,7 +967,8 @@ TEST(BilateralFilter, testNodeCreation)
         {
             if (dims == MAX_TENSOR_DIMS && i == 0)
             {
-                tensor_dims[i] = 1;
+                /* Per OpenVX spec, first dimension of 3D tensor must be 1 or 2 for radiometric */
+                tensor_dims[i] = (size_t)CT_RNG_NEXT_INT(rng, 1, 3);
             }
             else
             {

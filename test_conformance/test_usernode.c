@@ -20,6 +20,7 @@
 #include "test_engine/test.h"
 #include <VX/vx.h>
 #include <VX/vxu.h>
+#include <string.h>
 
 #define VX_KERNEL_CONFORMANCE_TEST_OWN_BAD (VX_KERNEL_BASE(VX_ID_DEFAULT, 0) + 0)
 #define VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME "org.khronos.openvx.test.own_bad"
@@ -539,12 +540,16 @@ static void own_register_kernel(vx_context context, vx_bool is_meta_from_ref)
 {
     vx_kernel kernel = 0;
     vx_size size = local_size_auto_alloc;
+    vx_char kernel_name[VX_MAX_KERNEL_NAME];
+
+    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
 
     if (is_meta_from_ref)
     {
         ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
             context,
-            VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME,
+            kernel_name,
             VX_KERNEL_CONFORMANCE_TEST_OWN_USER,
             own_Kernel,
             2,
@@ -556,7 +561,7 @@ static void own_register_kernel(vx_context context, vx_bool is_meta_from_ref)
     {
         ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
             context,
-            VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME,
+            kernel_name,
             VX_KERNEL_CONFORMANCE_TEST_OWN_USER,
             own_Kernel,
             2,
@@ -1034,15 +1039,19 @@ TEST(UserNode, testRemoveKernel)
 {
     vx_context context = context_->vx_context_;
     vx_kernel kernel = 0;
+    vx_char kernel_name[VX_MAX_KERNEL_NAME];
 
     EXPECT_VX_OBJECT(kernel = vxGetKernelByEnum(context, VX_KERNEL_ADD), VX_TYPE_KERNEL);
     // Only kernels added through vxAddUserKernel can be removed
     ASSERT_EQ_VX_STATUS(VX_ERROR_INVALID_PARAMETERS, vxRemoveKernel(kernel));
     VX_CALL(vxReleaseKernel(&kernel));
 
+    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
+
     ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
             context,
-            VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME,
+            kernel_name,
             VX_KERNEL_CONFORMANCE_TEST_OWN_BAD,
             own_Kernel,
             2,
@@ -1057,10 +1066,14 @@ TEST(UserNode, testOutDelay)
 {
     vx_context context = context_->vx_context_;
     vx_kernel kernel = 0;
+    vx_char kernel_name[VX_MAX_KERNEL_NAME];
+
+    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
 
     ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
         context,
-        VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME,
+        kernel_name,
         VX_KERNEL_CONFORMANCE_TEST_OWN_BAD,
         own_Kernel,
         2,

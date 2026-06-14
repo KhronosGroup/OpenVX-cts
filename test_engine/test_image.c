@@ -723,24 +723,25 @@ void *ct_image_copy_impl(CT_Image ctimg, vx_image vximg, CT_ImageCopyDirection d
                 case VX_DF_IMAGE_NV12:
                 case VX_DF_IMAGE_NV21:
                 {
-                    vx_uint32 stride = (0 == plane) ? ctimg->stride : ctimg->width / 2;
-                    vx_uint8* ct_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * stride + x);
-                    vx_uint8* vx_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(p_vx_base, x, y, &addr);
-
-                    if (COPY_CT_IMAGE_TO_VX_IMAGE == dir)
+                    vx_uint32 stride = ctimg->stride;
+                    if (0 == plane)
                     {
-                        if (0 == plane)
+                        vx_uint8* ct_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * stride + x);
+                        vx_uint8* vx_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(p_vx_base, x, y, &addr);
+                        if (COPY_CT_IMAGE_TO_VX_IMAGE == dir)
                             vx_ptr[0] = ct_ptr[0];
                         else
+                            ct_ptr[0] = vx_ptr[0];
+                    }
+                    else
+                    {
+                        vx_uint8* ct_ptr = (vx_uint8*)((vx_uint8*)p_ct_base + y * stride / addr.step_y + (size_t)(x / addr.step_x) * 2);
+                        vx_uint8* vx_ptr = (vx_uint8*)vxFormatImagePatchAddress2d(p_vx_base, x, y, &addr);
+                        if (COPY_CT_IMAGE_TO_VX_IMAGE == dir)
                         {
                             vx_ptr[0] = ct_ptr[0];
                             vx_ptr[1] = ct_ptr[1];
                         }
-                    }
-                    else
-                    {
-                        if (0 == plane)
-                            ct_ptr[0] = vx_ptr[0];
                         else
                         {
                             ct_ptr[0] = vx_ptr[0];
@@ -1304,10 +1305,10 @@ void ct_fill_ct_image_random(CT_Image image, uint64_t* seed, int a, int b)
     else if( format == VX_DF_IMAGE_NV12 || format == VX_DF_IMAGE_NV21 )
     {
         nplanes = 2;
-        width[1] = width[0];
-        height[1] = height[0]/2;
+        width[1] = width[0] / 2;
+        height[1] = height[0] / 2;
         stride[1] = stride[0];
-        format = VX_DF_IMAGE_U8;
+        format = VX_DF_IMAGE_U16;
     }
 
     ASSERT( format == VX_DF_IMAGE_U1  || format == VX_DF_IMAGE_U8  ||

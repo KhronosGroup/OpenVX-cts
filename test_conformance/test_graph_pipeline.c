@@ -63,8 +63,12 @@ typedef struct {
 #define ADD_LOOP_1000(testArgName, nextmacro, ...) \
     CT_EXPAND(nextmacro(testArgName "/loop_count=1000", __VA_ARGS__, 1000))
 
+#ifndef GRAPH_PIPELINE_STRESS_TEST_COUNT
+#define GRAPH_PIPELINE_STRESS_TEST_COUNT 100000
+#endif
+
 #define ADD_LOOP_100000(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/loop_count=100000", __VA_ARGS__, 100000))
+    CT_EXPAND(nextmacro(testArgName "/loop_count=100000", __VA_ARGS__, GRAPH_PIPELINE_STRESS_TEST_COUNT))
 
 #define ADD_LOOP_1000000(testArgName, nextmacro, ...) \
     CT_EXPAND(nextmacro(testArgName "/loop_count=1000000", __VA_ARGS__, 1000000))

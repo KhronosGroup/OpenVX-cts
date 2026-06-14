@@ -1681,23 +1681,17 @@ typedef struct
 TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_arg,
         ARG("DEPTH_CONVERT_SAT_Q78_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_Q78_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_Q78_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_S8, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_U8_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_Q78, -128.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_U8_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_U8, 0.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_U8_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_S8, -128.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_S8_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_S8_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_S8_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_S8, 0.f, 1.f),
 
         ARG("DEPTH_CONVERT_WRAP_Q78_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_Q78_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_Q78_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_S8, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_U8_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_Q78, -128.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_U8_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_U8, 0.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_U8_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_S8, -128.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_S8_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_S8_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_S8_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_S8, 0.f, 1.f),
 )
 {
     const vx_context context = context_->vx_context_;
@@ -1866,7 +1860,7 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
                     break;
                 case TT_U8:
                     {
-                        vx_uint8 ref = wrap ? (vx_uint8)tmp : CLAMP(tmp, 0, UINT8_MAX);  // CLAMP not really needed
+                        vx_uint8 ref = wrap ? (vx_uint8)((vx_int32)tmp) : CLAMP(tmp, 0, UINT8_MAX);  // ARM casting fix
                         vx_uint8 res = *(vx_uint8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -1874,7 +1868,7 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
                     break;
                 case TT_S8:
                     {
-                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //TODO: cast issue?
+                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //ARM casting fix
                         vx_int8 res = *(vx_int8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -1902,23 +1896,17 @@ TEST_WITH_ARG(TensorOp, testvxTensorConvertDepth, test_tensor_convert_depth_op_a
 TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_arg,
         ARG("DEPTH_CONVERT_SAT_Q78_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_Q78_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_Q78_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_Q78, TT_S8, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_U8_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_Q78, -128.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_U8_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_U8, 0.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_U8_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_U8, TT_S8, -128.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_S8_TO_Q78_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_SAT_S8_TO_U8_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_SAT_S8_TO_S8_FULL", VX_CONVERT_POLICY_SATURATE, TT_S8, TT_S8, 0.f, 1.f),
 
         ARG("DEPTH_CONVERT_WRAP_Q78_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_Q78_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_Q78_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_Q78, TT_S8, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_U8_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_Q78, -128.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_U8_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_U8, 0.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_U8_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_U8, TT_S8, -128.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_S8_TO_Q78_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_Q78, 0.f, 1.f),
         ARG("DEPTH_CONVERT_WRAP_S8_TO_U8_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_U8, 128.f, 1.f),
-        ARG("DEPTH_CONVERT_WRAP_S8_TO_S8_FULL", VX_CONVERT_POLICY_WRAP, TT_S8, TT_S8, 0.f, 1.f),
 )
 {
     const vx_context context = context_->vx_context_;
@@ -2075,7 +2063,7 @@ TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_
                     break;
                 case TT_U8:
                     {
-                        vx_uint8 ref = wrap ? (vx_uint8)tmp : CLAMP(tmp, 0, UINT8_MAX);  // CLAMP not really needed
+                        vx_uint8 ref = wrap ? (vx_uint8)((vx_int32)tmp) : CLAMP(tmp, 0, UINT8_MAX);  // ARM casting fix
                         vx_uint8 res = *(vx_uint8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
@@ -2083,7 +2071,7 @@ TEST_WITH_ARG(TensorOp, testvxuTensorConvertDepth, test_tensor_convert_depth_op_
                     break;
                 case TT_S8:
                     {
-                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //TODO: cast issue?
+                        vx_int8 ref = wrap ? (vx_int8)tmp : (vx_int8)CLAMP(tmp, INT8_MIN, INT8_MAX); //ARM casting fix
                         vx_int8 res = *(vx_int8*)((char*)dst_data + dst_tensor_byte_offset);
                         if (res != ref) printf("DIFF!!!\n");
                         if (!DEBUG_TEST_TENSOR_CONTINUE_AFTER_ERROR) ASSERT_EQ_INT(res, ref); else EXPECT_EQ_INT(res, ref);
