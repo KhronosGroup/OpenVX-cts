@@ -542,7 +542,7 @@ static void own_register_kernel(vx_context context, vx_bool is_meta_from_ref)
     vx_size size = local_size_auto_alloc;
     vx_char kernel_name[VX_MAX_KERNEL_NAME];
 
-    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_USER_NAME, VX_MAX_KERNEL_NAME - 1);
     kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
 
     if (is_meta_from_ref)
@@ -1046,7 +1046,7 @@ TEST(UserNode, testRemoveKernel)
     ASSERT_EQ_VX_STATUS(VX_ERROR_INVALID_PARAMETERS, vxRemoveKernel(kernel));
     VX_CALL(vxReleaseKernel(&kernel));
 
-    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1);
     kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
 
     ASSERT_VX_OBJECT(kernel = vxAddUserKernel(
@@ -1068,7 +1068,7 @@ TEST(UserNode, testOutDelay)
     vx_kernel kernel = 0;
     vx_char kernel_name[VX_MAX_KERNEL_NAME];
 
-    ASSERT(strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1) == kernel_name);
+    strncpy(kernel_name, VX_KERNEL_CONFORMANCE_TEST_OWN_BAD_NAME, VX_MAX_KERNEL_NAME - 1);
     kernel_name[VX_MAX_KERNEL_NAME - 1] = '\0';
 
     ASSERT_VX_OBJECT(kernel = vxAddUserKernel(

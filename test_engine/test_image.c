@@ -1305,10 +1305,10 @@ void ct_fill_ct_image_random(CT_Image image, uint64_t* seed, int a, int b)
     else if( format == VX_DF_IMAGE_NV12 || format == VX_DF_IMAGE_NV21 )
     {
         nplanes = 2;
-        width[1] = width[0] / 2;
-        height[1] = height[0] / 2;
+        width[1] = width[0];
+        height[1] = height[0]/2;
         stride[1] = stride[0];
-        format = VX_DF_IMAGE_U16;
+        format = VX_DF_IMAGE_U8;
     }
 
     ASSERT( format == VX_DF_IMAGE_U1  || format == VX_DF_IMAGE_U8  ||

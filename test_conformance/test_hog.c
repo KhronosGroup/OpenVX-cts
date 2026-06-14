@@ -156,7 +156,7 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
             *(bins_ref + bins_index) += (vx_int16)((magnitude / (cell_width * cell_height)) * powf(2, 8));
         }
     }
-    for (vx_int32 i = 0; i < num_cells_h * num_cells_w; i++)
+    for (vx_size i = 0; i < num_cells_h * num_cells_w; i++)
     {
         vx_float32 mag_ref_data = *(mag_ref + i);
         vx_float32 mag_data = *(mag + i);
@@ -168,7 +168,7 @@ static vx_status hogcells_ref(CT_Image img, vx_int32 cell_width, vx_int32 cell_h
     }
     if (status == VX_SUCCESS)
     {
-        for (vx_int32 i = 0; i < num_cells_h * num_cells_w * bins_num; i++)
+        for (vx_size i = 0; i < num_cells_h * num_cells_w * bins_num; i++)
         {
             vx_float32 bins_ref_data = *(bins_ref + i);
             vx_float32 bins_data = *(bins_p + i);

@@ -67,8 +67,12 @@ typedef struct {
 #define GRAPH_PIPELINE_STRESS_TEST_COUNT 100000
 #endif
 
+/* Helper macros to stringify the configurable loop count for test names */
+#define CT_STR(s) #s
+#define CT_XSTR(s) CT_STR(s)
+
 #define ADD_LOOP_100000(testArgName, nextmacro, ...) \
-    CT_EXPAND(nextmacro(testArgName "/loop_count=100000", __VA_ARGS__, GRAPH_PIPELINE_STRESS_TEST_COUNT))
+    CT_EXPAND(nextmacro(testArgName "/loop_count=" CT_XSTR(GRAPH_PIPELINE_STRESS_TEST_COUNT), __VA_ARGS__, GRAPH_PIPELINE_STRESS_TEST_COUNT))
 
 #define ADD_LOOP_1000000(testArgName, nextmacro, ...) \
     CT_EXPAND(nextmacro(testArgName "/loop_count=1000000", __VA_ARGS__, 1000000))
