@@ -804,6 +804,8 @@ TEST_WITH_ARG(LaplacianPyramid, testGraphProcessing, Arg, LAPLACIAN_PYRAMID_PARA
             }
         }
         vx_image mod_src = ct_image_to_vx_image(modified, context);
+        // Rebuild reference pyramid with modified input for fair comparison
+        own_laplacian_pyramid_reference(context, border, mod_src, ref_pyr, ref_dst);
         own_laplacian_pyramid_openvx(context, border, mod_src, tst_pyr, tst_dst);
         vxReleaseImage(&mod_src);
         ct_free_image(modified);
@@ -1146,8 +1148,9 @@ TEST_WITH_ARG(LaplacianReconstruct, testGraphProcessing, Arg, LAPLACIAN_RECONSTR
             }
         }
         vx_image mod_src = ct_image_to_vx_image(modified, context);
-        // Rebuild pyramid with modified input
+        // Rebuild reference pyramid and reconstruct with modified input for fair comparison
         own_laplacian_pyramid_reference(context, build_border, mod_src, ref_pyr, ref_lowest_res);
+        own_laplacian_reconstruct_reference(context, build_border, ref_pyr, ref_lowest_res, ref_dst);
         own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
         vxReleaseImage(&mod_src);
         ct_free_image(modified);
