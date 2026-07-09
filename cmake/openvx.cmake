@@ -1,5 +1,5 @@
 
-# Copyright (c) 2012-2017 The Khronos Group Inc.
+# Copyright (c) 2012-2026 The Khronos Group Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,17 @@
 
 set(KHRONOS_SRC_DIR ..)
 set(OVX_TARGET_NAME c_model)
-set(OVX_TARGET_CORES 4) #TODO: determine number of CPU cores for target platform
+
+# Number of CPU cores the target is expected to have. Defaults to the number of
+# logical cores detected on the build host; override with -DOVX_TARGET_CORES=<n>
+# when cross-compiling for a target with a different core count.
+if(NOT DEFINED OVX_TARGET_CORES)
+  cmake_host_system_information(RESULT OVX_TARGET_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+  if(NOT OVX_TARGET_CORES OR OVX_TARGET_CORES LESS 1)
+    set(OVX_TARGET_CORES 4)
+  endif()
+endif()
+message(STATUS "OpenVX sample target cores: ${OVX_TARGET_CORES}")
 
 include(CheckCCompilerFlag)
 
@@ -49,7 +59,7 @@ macro(openvx_target_setup target)
                                                TARGET_NUM_CORES=${OVX_TARGET_CORES}
                             )
   if (WIN32)
-    target_compile_definitions(${target} PRIVATE WINVER=0x501 _WIN32_WINNT=0x0600 "VX_API_ENTRY=__declspec(dllexport)")
+    target_compile_definitions(${target} PRIVATE WINVER=0x0600 _WIN32_WINNT=0x0600 "VX_API_ENTRY=__declspec(dllexport)")
   else()
     # _XOPEN_SOURCE=700 -> use POSIX 2008 (SUS v4)
     # _BSD_SOURCE=1     -> functionality derived from 4.3 BSD Unix is included as well as the ISO C, POSIX.1, and POSIX.2 material.
@@ -173,13 +183,4 @@ if (MSVC)
   # compile that file as C++ because MSVC in not C99 compliant
   set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/${KHRONOS_SRC_DIR}/sample/targets/c_model/vx_optpyrlk.c"
                               PROPERTIES COMPILE_FLAGS /TP)
-endif()
-
-if (0)
-  project(vx_conformance C)
-  file(GLOB OVX_CONFORMANCE "${KHRONOS_SRC_DIR}/conformance/*.c")
-  add_executable(vx_conformance ${OVX_CONFORMANCE})
-  target_include_directories(vx_conformance PRIVATE "${KHRONOS_SRC_DIR}/conformance")
-  target_link_libraries(vx_conformance PRIVATE openvx-debug-lib openvx-helper openvx vxu)
-  openvx_target_setup(vx_conformance)
 endif()

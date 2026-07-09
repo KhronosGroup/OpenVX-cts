@@ -266,6 +266,35 @@ Run a specific test by full name:
 
 > **Note:** Quote the `--filter` argument to prevent shell glob expansion (especially in zsh).
 
+### Batch Test Runner (`run_tests.py`)
+
+`run_tests.py` is an optional helper (requires **Python 3**) that wraps the
+`vx_test_conformance` binary and runs **each test in its own process**. This
+isolates crashes to a single test and, unlike a plain run of the binary,
+enforces a **per-test timeout** so a hanging test cannot stall the whole suite.
+It then prints an aggregate `#REPORT:` summary line with the total, disabled,
+started, completed, passed, and failed counts.
+
+```bash
+# Usage: run_tests.py <vx_test_conformance executable> [extra options]
+python3 run_tests.py ./build/bin/vx_test_conformance
+
+# Restrict to a subset of tests
+python3 run_tests.py ./build/bin/vx_test_conformance --filter='*Canny*'
+```
+
+Configuration is via environment variables:
+
+| Variable | Description |
+|---|---|
+| `VX_TEST_DATA_PATH` | Path to the `test_data/` directory (consumed by `vx_test_conformance`). |
+| `VX_TEST_TIMEOUT` | Per-test timeout in seconds (default `65`). A test exceeding this is terminated and counted as failed. |
+
+The script exits `0` only if every test started and none failed; otherwise it
+exits `1`. It is a convenience/debugging aid and is **not** required to produce
+a conformance result — an official run is a plain invocation of
+`vx_test_conformance` with no flags (see [Conformance Run](#conformance-run)).
+
 ## Test Data
 
 The `test_data/` directory contains:
@@ -297,7 +326,8 @@ cts/
 │   ├── test_binop1u.c          # Binary operations (U1)
 │   └── ...                     # Additional test files
 ├── test_data/                  # Input images and reference data
-└── test_data_generator/        # Utilities to regenerate test data
+├── test_data_generator/        # Utilities to regenerate test data
+└── run_tests.py                # Optional batch runner (per-test isolation + timeout)
 ```
 
 ## License

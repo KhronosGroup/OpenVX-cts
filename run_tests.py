@@ -1,7 +1,7 @@
-#!/bin/env python
+#!/usr/bin/env python3
 # 
 
-# Copyright (c) 2012-2017 The Khronos Group Inc.
+# Copyright (c) 2012-2026 The Khronos Group Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ class BackgroundProcess(threading.Thread):
     def run(self):
         self.process = subprocess.Popen(
             stderr=subprocess.PIPE,
+            universal_newlines=True,
             **self.args)
         self.stdout, self.stderr = self.process.communicate()
 
@@ -76,7 +77,8 @@ class TestRunner(object):
     def get_test_list(self):
         p = subprocess.Popen(
                              args=self.launch_args + ['--quiet', '--list_tests', '--run_disabled'],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             universal_newlines=True)
         stdout, stderr = p.communicate()
         if p.returncode != 0:
             raise Exception("Can't get list of tests")
@@ -192,7 +194,7 @@ Example:
                 except KeyboardInterrupt:
                     break
                 except:
-                    print traceback.format_exc()
+                    print(traceback.format_exc())
 
             print('')
             print('ALL DONE')
@@ -212,7 +214,7 @@ Example:
 
             return 0 if (self.total_tests == (self.total_started_tests + self.total_disabled_tests) and self.total_failed_tests == 0) else 1
         except:
-            print traceback.format_exc()
+            print(traceback.format_exc())
 
 if __name__ == "__main__":
     sys.exit(TestRunner().run())

@@ -1,4 +1,10 @@
+# Build output directories
 /build-cts
 /build
 /install
 /build-*
+build/
+
+# Python
+__pycache__/
+*.py[cod]

@@ -1,2 +1,2 @@
 // <Specification version>-<package release date:YYYYMMDD>
-#define VERSION_STR "1.3"
+#define VERSION_STR "1.3.2"

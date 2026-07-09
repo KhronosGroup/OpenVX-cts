@@ -1,46 +1,96 @@
-How to build and run conformance tests on Android
-=================================================
+How to build and run the OpenVX conformance tests on Android
+============================================================
 
-This guide assumes the following:
-- adb is installed and configured (connected to device);
-- Android NDK is installed and configured;
-- you have Android build of tested OpenVX implementation;
-- you use Linux bash or equivalent shell;
+The conformance tests are built with CMake (see the top-level CMakeLists.txt).
+On Android the same CMake project is cross-compiled using the CMake toolchain
+file shipped with the Android NDK. The legacy ndk-build / Android.mk flow has
+been removed because it did not enable the conformance feature-set macros and
+did not build the NN "Networks" sources or the loadable test module, so it
+produced an incomplete test binary.
 
-Also commands below assume that tested package of OpenVX implementation contains:
-  * 'include' subdirectory that contains OpenVX header files;
-  * 'lib' subdirectory that contains implementation binaries (libopenvx.so and libvxu.so);
-If it is not, then commands below should be updated to actual state.
+Prerequisites
+-------------
+- Android NDK (r19 or newer; it bundles CMake and the toolchain file).
+- CMake 3.10 or newer on the host.
+- adb installed and configured (device connected / emulator running).
+- An Android build of the OpenVX implementation under test, providing:
+    * an 'include' directory with the OpenVX headers, and
+    * a 'lib' directory with the implementation binaries
+      (libopenvx.so and libvxu.so), built for the same ABI you target below.
 
 
-1. Set Android ABI:
+1. Set the environment
+-----------------------
+    # Path to the Android NDK
+    export ANDROID_NDK=<path to android-ndk>
 
-    export ANDROID_ABI=armeabi-v7a
-    # or ANDROID_ABI=x86
-    # or ANDROID_ABI=mips
-
-This ABI must be equal to ABI of OpenVX implementation binaries.
-
-2. Change directory:
-
-    cd conformance_tests/android
-
-3. Build conformance tests binaries:
-
+    # Path to the OpenVX implementation package built for Android
     export OPENVX_DIR=<path to tested OpenVX implementation package>
-    ndk-build OPENVX_INCLUDES=${OPENVX_DIR}/include/ OPENVX_LIBRARIES="-L ${OPENVX_DIR}/lib/ -lopenvx -lvxu" APP_ABI=${ANDROID_ABI}
 
-4. Deploy files on device and run conformance tests. Use commands below as a sample:
+    # Target ABI. Must match the ABI of the OpenVX implementation binaries.
+    # Recommended for modern devices: arm64-v8a
+    # Other valid values: armeabi-v7a, x86_64, x86
+    export ANDROID_ABI=arm64-v8a
 
-    # Upload test executable to device
-    adb push `pwd`/libs/${ANDROID_ABI}/vx_test_conformance /data/local/tmp/openvx/
-    adb shell chmod 777 /data/local/tmp/openvx/vx_test_conformance
+    # Minimum Android API level (adjust to match your device / OpenVX build)
+    export ANDROID_PLATFORM=android-24
 
-    # Upload shared libraries to device (OPTIONAL step, refer to OpenVX implementation documentation)
-    (cd ${OPENVX_DIR}/lib; find ./ -name '*.so' -exec adb push {} /data/local/tmp/openvx/lib/{} \;)
 
-    # Upload test data to device
-    (cd ../test_data; find ./ -exec adb push {} /data/local/tmp/openvx/test_data/{} \;)
+2. Configure and build
+----------------------
+    cd conformance_tests
+    mkdir -p build-android && cd build-android
 
-    # Run test on device
-    adb shell 'export LD_LIBRARY_PATH=/data/local/tmp/openvx/lib/:${LD_LIBRARY_PATH}; export VX_TEST_DATA_PATH=/data/local/tmp/openvx/test_data/; /data/local/tmp/openvx/vx_test_conformance'
+    cmake .. \
+        -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake \
+        -DANDROID_ABI=${ANDROID_ABI} \
+        -DANDROID_PLATFORM=${ANDROID_PLATFORM} \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DOPENVX_INCLUDES=${OPENVX_DIR}/include \
+        -DOPENVX_LIBRARIES="${OPENVX_DIR}/lib/libopenvx.so;${OPENVX_DIR}/lib/libvxu.so"
+
+    cmake --build . -j
+
+Notes:
+  * The feature sets (Vision, Enhanced Vision, Neural Networks, Import/Export,
+    U1, ...) are enabled by default. Toggle them with the same options used on
+    other platforms, e.g. -DOPENVX_USE_PIPELINING=ON, -DOPENVX_USE_U1=OFF, etc.
+  * NNEF import is enabled by default and needs the NNEF parser headers/libs.
+    If they are not available for your Android build, disable it with
+    -DOPENVX_CONFORMANCE_NNEF_IMPORT=OFF.
+  * If the implementation needs extra link dependencies, append them to
+    OPENVX_LIBRARIES (semicolon-separated), for example:
+    "...;libopenvx.so;libvxu.so;log" .
+
+After a successful build:
+  * the test executable is at   build-android/bin/vx_test_conformance
+  * loadable test modules are at build-android/lib/*.so
+
+
+3. Deploy on the device and run
+-------------------------------
+Use the commands below as a sample; adjust paths to match your setup.
+
+    DEVDIR=/data/local/tmp/openvx
+
+    # Create the layout on device
+    adb shell mkdir -p ${DEVDIR}/lib ${DEVDIR}/test_data
+
+    # Upload the test executable
+    adb push bin/vx_test_conformance ${DEVDIR}/
+    adb shell chmod 755 ${DEVDIR}/vx_test_conformance
+
+    # Upload loadable test module(s) built alongside the executable
+    adb push lib/. ${DEVDIR}/lib/
+
+    # Upload the OpenVX implementation shared libraries
+    #   (refer to the OpenVX implementation documentation)
+    (cd ${OPENVX_DIR}/lib; find . -name '*.so' -exec adb push {} ${DEVDIR}/lib/ \;)
+
+    # Upload test data
+    (cd ../../test_data; adb push . ${DEVDIR}/test_data/)
+
+    # Run the tests on device
+    adb shell "export LD_LIBRARY_PATH=${DEVDIR}/lib:\${LD_LIBRARY_PATH}; \
+               export VX_TEST_DATA_PATH=${DEVDIR}/test_data/; \
+               ${DEVDIR}/vx_test_conformance"
