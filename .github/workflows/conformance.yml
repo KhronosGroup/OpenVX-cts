@@ -1,0 +1,284 @@
+name: Conformance
+
+# Builds the Khronos OpenVX sample implementation and runs this CTS checkout
+# against it, mirroring the modes from the internal GitLab pipeline
+# (.gitlab-ci.yml) but adapted for GitHub Actions and the public
+# KhronosGroup/OpenVX-sample-impl repository.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - openvx_1.3.2
+  workflow_dispatch:
+
+env:
+  SAMPLE_IMPL_REPO: https://github.com/KhronosGroup/OpenVX-sample-impl.git
+  SAMPLE_IMPL_REF: openvx_1.3.2
+
+jobs:
+  # Stage 1 -- sanity build: confirm this CTS checkout compiles against a
+  # default-feature build of the sample implementation. Gates the test matrix.
+  build:
+    name: Build · CTS + sample impl
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout CTS
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            cmake make git python3 gcc g++
+          gcc --version
+
+      - name: Configure paths
+        run: |
+          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
+          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
+          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
+
+      - name: Clone sample implementation
+        run: |
+          rm -rf "$SAMPLE_IMPL_DIR"
+          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
+            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
+
+      - name: Build sample implementation
+        run: |
+          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cmake "$SAMPLE_IMPL_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
+            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
+            -DBUILD_X64=1
+          make install -j"$(nproc)"
+
+      - name: Build CTS
+        run: |
+          rm -rf "$RUNNER_TEMP/build-cts"
+          mkdir -p "$RUNNER_TEMP/build-cts"
+          cd "$RUNNER_TEMP/build-cts"
+          cmake \
+            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
+            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
+            "$GITHUB_WORKSPACE"
+          cmake --build . -j"$(nproc)"
+
+  # Stage 2 -- conformance test matrix. Each mode rebuilds the sample impl with
+  # its feature flags (features are compiled into libopenvx.so) and runs the
+  # matching slice of the suite, mirroring GitLab modes 1-3, 5-7.
+  conformance:
+    name: Conformance · ${{ matrix.name }}
+    needs: build
+    runs-on: ubuntu-22.04
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Mode 1 -- Vision
+          - name: Vision
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON"
+            filter: ""
+          # Mode 2 -- Vision + Enhanced Vision
+          - name: Vision + Enhanced Vision
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
+            filter: ""
+          # Mode 3 -- Neural Networks (AlexNet needs weights not shipped in
+          # test_data, so it is excluded to avoid a spurious failure).
+          - name: Neural Networks
+            impl_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
+            filter: "--filter=-TensorNetworks.AlexNetTestNetwork"
+          # Mode 5 -- Combined (Vision, Enhanced, NN, NN16, Import/Export, U1)
+          - name: Combined
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON -DOPENVX_USE_NN=ON -DOPENVX_USE_IX=ON -DOPENVX_USE_U1=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON -DOPENVX_USE_NN=ON -DOPENVX_USE_IX=ON -DOPENVX_USE_U1=ON"
+            filter: "--filter=-TensorNetworks.AlexNetTestNetwork"
+          # Mode 6 -- User Data Object
+          - name: User Data Object
+            impl_flags: "-DOPENVX_USE_USER_DATA_OBJECT=ON"
+            cts_flags: "-DOPENVX_USE_USER_DATA_OBJECT=ON"
+            filter: ""
+          # Mode 7 -- Pipelining (run only the pipeline suite)
+          - name: Pipelining
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON"
+            filter: "--filter=GraphPipeline.*"
+    steps:
+      - name: Checkout CTS
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            cmake make git python3 gcc g++
+
+      - name: Configure paths
+        run: |
+          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
+          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
+          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
+
+      - name: Clone sample implementation
+        run: |
+          rm -rf "$SAMPLE_IMPL_DIR"
+          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
+            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
+
+      - name: Build sample implementation
+        run: |
+          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cmake "$SAMPLE_IMPL_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
+            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
+            -DBUILD_X64=1 ${{ matrix.impl_flags }}
+          make install -j"$(nproc)"
+
+      - name: Build CTS
+        run: |
+          rm -rf "$RUNNER_TEMP/build-cts"
+          mkdir -p "$RUNNER_TEMP/build-cts"
+          cd "$RUNNER_TEMP/build-cts"
+          cmake \
+            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
+            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
+            ${{ matrix.cts_flags }} "$GITHUB_WORKSPACE"
+          cmake --build . -j"$(nproc)"
+
+      - name: Run conformance
+        run: |
+          cd "$RUNNER_TEMP/build-cts"
+          LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" \
+            ./bin/vx_test_conformance ${{ matrix.filter }}
+
+  # Mode 4 -- NNEF Import. Needs extra include path + links libnnef-lib.a and
+  # stdc++. The sample impl's NNEF submodule uses std::numeric_limits without
+  # including <limits>, so force-include it on the impl build.
+  nnef-import:
+    name: Conformance · NNEF Import
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout CTS
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            cmake make git python3 gcc g++
+
+      - name: Configure paths
+        run: |
+          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
+          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
+          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
+
+      - name: Clone sample implementation
+        run: |
+          rm -rf "$SAMPLE_IMPL_DIR"
+          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
+            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
+
+      - name: Build sample implementation (NNEF)
+        run: |
+          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cmake "$SAMPLE_IMPL_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
+            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
+            -DBUILD_X64=1 \
+            -DOPENVX_CONFORMANCE_NNEF_IMPORT=ON \
+            -DCMAKE_CXX_FLAGS="-include limits"
+          make install -j"$(nproc)"
+
+      - name: Build and run CTS (NNEF)
+        run: |
+          rm -rf "$RUNNER_TEMP/build-cts"
+          mkdir -p "$RUNNER_TEMP/build-cts"
+          cd "$RUNNER_TEMP/build-cts"
+          cmake \
+            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
+            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;$OPENVX_DIR/bin/libnnef-lib.a;pthread;dl;m;rt;stdc++" \
+            -DOPENVX_CONFORMANCE_NNEF_IMPORT=ON \
+            -DCMAKE_C_FLAGS="-I$SAMPLE_IMPL_DIR/kernels/NNEF-Tools/parser/cpp/include" \
+            "$GITHUB_WORKSPACE"
+          cmake --build . -j"$(nproc)"
+          LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance
+
+  # Mode 8 -- Streaming. The streaming + event-queue APIs are stubs in the
+  # sample implementation, so this job is allowed to fail and surfaces only as
+  # a warning (mirrors GitLab `allow_failure: true`).
+  streaming:
+    name: Conformance · Streaming (warn-only)
+    needs: build
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - name: Checkout CTS
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            cmake make git python3 gcc g++
+
+      - name: Configure paths
+        run: |
+          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
+          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
+          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
+
+      - name: Clone sample implementation
+        run: |
+          rm -rf "$SAMPLE_IMPL_DIR"
+          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
+            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
+
+      - name: Build sample implementation (Streaming)
+        run: |
+          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
+          cmake "$SAMPLE_IMPL_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
+            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
+            -DBUILD_X64=1 \
+            -DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON \
+            -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON
+          make install -j"$(nproc)"
+
+      - name: Build and run CTS (Streaming)
+        run: |
+          rm -rf "$RUNNER_TEMP/build-cts"
+          mkdir -p "$RUNNER_TEMP/build-cts"
+          cd "$RUNNER_TEMP/build-cts"
+          cmake \
+            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
+            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
+            -DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON \
+            -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON \
+            "$GITHUB_WORKSPACE"
+          cmake --build . -j"$(nproc)"
+          if ! LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance '--filter=GraphStreaming.*'; then
+            echo "::warning title=Streaming conformance::Streaming/event-queue APIs are stubbed in the sample implementation; failures are expected."
+          fi
