@@ -91,17 +91,17 @@ jobs:
             impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
             filter: ""
-          # Mode 3 -- Neural Networks (AlexNet needs weights not shipped in
-          # test_data, so it is excluded to avoid a spurious failure).
+          # Mode 3 -- Neural Networks (full suite; AlexNet weights + input
+          # images ship in test_conformance/Networks/Binaries and test_data/images).
           - name: Neural Networks
             impl_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
-            filter: "--filter=-TensorNetworks.AlexNetTestNetwork"
+            filter: ""
           # Mode 5 -- Combined (Vision, Enhanced, NN, NN16, Import/Export, U1)
           - name: Combined
             impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON -DOPENVX_USE_NN=ON -DOPENVX_USE_IX=ON -DOPENVX_USE_U1=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON -DOPENVX_USE_NN=ON -DOPENVX_USE_IX=ON -DOPENVX_USE_U1=ON"
-            filter: "--filter=-TensorNetworks.AlexNetTestNetwork"
+            filter: ""
           # Mode 6 -- User Data Object
           - name: User Data Object
             impl_flags: "-DOPENVX_USE_USER_DATA_OBJECT=ON"
