@@ -28,12 +28,13 @@
 typedef vx_coordinates2d_t Point;
 
 static void reference_minmaxloc(CT_Image src, int* _minval, int* _maxval,
-                                uint32_t* _mincount, uint32_t* _maxcount)
+                                vx_size* _mincount, vx_size* _maxcount)
 {
     Point pt={0, 0};
     int minval = INT_MAX, maxval = INT_MIN;
     int format = src ? src->format : VX_DF_IMAGE_U8;
-    uint32_t mincount = 0, maxcount = 0, stride;
+    vx_size mincount = 0, maxcount = 0;
+    uint32_t stride;
 
     ASSERT(src);
     ASSERT(src->width > 0 && src->height > 0);
@@ -162,7 +163,8 @@ TEST_WITH_ARG(MinMaxLoc, testOnRandom, format_arg,
     uint64_t rng;
     int a, b;
     int minval0 = 0, maxval0 = 0, minval = 0, maxval = 0;
-    uint32_t mincount0 = 0, maxcount0 = 0, mincount = 0, maxcount = 0;
+    vx_size mincount0 = 0, maxcount0 = 0;
+    vx_size mincount = 0, maxcount = 0;
     vx_scalar minval_, maxval_, mincount_, maxcount_;
     vx_array minloc_ = 0, maxloc_ = 0;
     vx_enum sctype = format == VX_DF_IMAGE_U8 ? VX_TYPE_UINT8 :
@@ -181,8 +183,8 @@ TEST_WITH_ARG(MinMaxLoc, testOnRandom, format_arg,
 
     minval_ = ct_scalar_from_int(context, sctype, 0);
     maxval_ = ct_scalar_from_int(context, sctype, 0);
-    mincount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
-    maxcount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
+    mincount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
+    maxcount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
     minloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, MAX_CAP);
     maxloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, MAX_CAP);
     ASSERT(vxGetStatus((vx_reference)minloc_) == VX_SUCCESS && vxGetStatus((vx_reference)maxloc_) == VX_SUCCESS);
@@ -267,8 +269,8 @@ TEST_WITH_ARG(MinMaxLoc, testOnRandom, format_arg,
                                      "\tActual:   minval=%d, maxval=%d, mincount=%d, maxcount=%d\n",
                                      __FUNCTION__, __FILE__, __LINE__,
                                      iter, width, height,
-                                     minval0, maxval0, mincount0, maxcount0,
-                                     minval, maxval, mincount, maxcount);
+                                     minval0, maxval0, (int)mincount0, (int)maxcount0,
+                                     minval, maxval, (int)mincount, (int)maxcount);
             break;
         }
 
