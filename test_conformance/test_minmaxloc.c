@@ -265,12 +265,12 @@ TEST_WITH_ARG(MinMaxLoc, testOnRandom, format_arg,
         if( minval != minval0 || maxval != maxval0 || mincount != mincount0 || maxcount != maxcount0 )
         {
             CT_RecordFailureAtFormat("Test case %d. width=%d, height=%d,\n"
-                                     "\tExpected: minval=%d, maxval=%d, mincount=%d, maxcount=%d\n"
-                                     "\tActual:   minval=%d, maxval=%d, mincount=%d, maxcount=%d\n",
+                                     "\tExpected: minval=%d, maxval=%d, mincount=%zu, maxcount=%zu\n"
+                                     "\tActual:   minval=%d, maxval=%d, mincount=%zu, maxcount=%zu\n",
                                      __FUNCTION__, __FILE__, __LINE__,
                                      iter, width, height,
-                                     minval0, maxval0, (int)mincount0, (int)maxcount0,
-                                     minval, maxval, (int)mincount, (int)maxcount);
+                                     minval0, maxval0, (size_t)mincount0, (size_t)maxcount0,
+                                     minval, maxval, (size_t)mincount, (size_t)maxcount);
             break;
         }
 
