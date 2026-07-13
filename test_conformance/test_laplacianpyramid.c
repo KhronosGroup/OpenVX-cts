@@ -793,6 +793,24 @@ TEST_WITH_ARG(LaplacianPyramid, testGraphProcessing, Arg, LAPLACIAN_PYRAMID_PARA
     own_laplacian_pyramid_reference(context, border, src, ref_pyr, ref_dst);
     own_laplacian_pyramid_openvx(context, border, src, tst_pyr, tst_dst);
 
+    /* Issue #37: modify the input and re-run the graph a second time to detect
+       stale-output bugs. Rebuild the reference with the modified input so the
+       comparison is fair for implementations that correctly recompute. */
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        vx_image mod_src = 0;
+        vx_uint32 x, y;
+
+        for (y = 0; y < input->height; y++)
+            for (x = 0; x < input->width; x++)
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
+
+        ASSERT_VX_OBJECT(mod_src = ct_image_to_vx_image(modified, context), VX_TYPE_IMAGE);
+        own_laplacian_pyramid_reference(context, border, mod_src, ref_pyr, ref_dst);
+        own_laplacian_pyramid_openvx(context, border, mod_src, tst_pyr, tst_dst);
+        VX_CALL(vxReleaseImage(&mod_src));
+    }
+
     {
         CT_Image ct_ref_dst = 0;
         CT_Image ct_tst_dst = 0;
@@ -1118,6 +1136,25 @@ TEST_WITH_ARG(LaplacianReconstruct, testGraphProcessing, Arg, LAPLACIAN_RECONSTR
     own_laplacian_pyramid_reference(context, build_border, src, ref_pyr, ref_lowest_res);
     own_laplacian_reconstruct_reference(context, build_border, ref_pyr, ref_lowest_res, ref_dst);
     own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
+
+    /* Issue #37: modify the input and re-run the graph a second time to detect
+       stale-output bugs. Rebuild the reference pyramid and reconstruction with
+       the modified input so the comparison is fair. */
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        vx_image mod_src = 0;
+        vx_uint32 x, y;
+
+        for (y = 0; y < input->height; y++)
+            for (x = 0; x < input->width; x++)
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
+
+        ASSERT_VX_OBJECT(mod_src = ct_image_to_vx_image(modified, context), VX_TYPE_IMAGE);
+        own_laplacian_pyramid_reference(context, build_border, mod_src, ref_pyr, ref_lowest_res);
+        own_laplacian_reconstruct_reference(context, build_border, ref_pyr, ref_lowest_res, ref_dst);
+        own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
+        VX_CALL(vxReleaseImage(&mod_src));
+    }
 
     {
         CT_Image ct_ref_dst = 0;
