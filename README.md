@@ -6,7 +6,36 @@ The OpenVX Conformance Test Suite (CTS) verifies that an OpenVX implementation c
 
 - **CMake** 3.10 or later
 - **C99-compatible compiler** (GCC, Clang, or MSVC)
+- **Git LFS** — required to fetch the binary test images in `test_data/` (see [Cloning](#cloning) below)
 - An OpenVX implementation — either a pre-built library or the Khronos sample implementation
+
+## Cloning
+
+Since the `openvx_1.3.2` branch, the binary test images in `test_data/` (e.g. `lena.bmp`) are stored using [Git LFS](https://git-lfs.com/). **Install Git LFS before cloning**, otherwise `test_data/` will contain small text pointer files instead of the actual images.
+
+```bash
+# Install Git LFS (once per machine), then enable it for your user
+git lfs install
+
+# Clone as usual — LFS objects are fetched automatically
+git clone <repository-url>
+```
+
+If you already cloned without Git LFS, install it and then pull the real files:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+Without Git LFS the files appear present on disk, but the CTS fails at runtime with errors such as:
+
+```
+FAILED at test_engine/test_image.c:387
+    Can't open image file: lena.bmp
+```
+
+> **Note:** This applies to `openvx_1.3.2` and later. The `openvx_1.3` branch stored test images as regular git blobs and did not require Git LFS.
 
 ## Building
 

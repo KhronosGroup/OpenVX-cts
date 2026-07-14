@@ -92,14 +92,14 @@ TEST_WITH_ARG(MatchTemplate, testGraphProcessing, method_type_arg,
     VX_CALL(vxVerifyGraph(graph));
     VX_CALL(vxProcessGraph(graph));
 
-    uint32_t mincount = 0, maxcount = 0;
+    vx_size mincount = 0, maxcount = 0;
     vx_scalar minval_, maxval_, mincount_, maxcount_;
     vx_array minloc_ = 0, maxloc_ = 0;
     vx_enum sctype = VX_TYPE_INT16;
     minval_ = ct_scalar_from_int(context, sctype, 0);
     maxval_ = ct_scalar_from_int(context, sctype, 0);
-    mincount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
-    maxcount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
+    mincount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
+    maxcount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
     minloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, 300);
     maxloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, 300);
     node = vxMinMaxLocNode(graph, vx_result_image, minval_, maxval_,
@@ -172,14 +172,14 @@ TEST_WITH_ARG(MatchTemplate,  testImmediateProcessing, method_type_arg,
 
     VX_CALL(vxuMatchTemplate(context, vx_source_image, vx_template_image, arg_->type, vx_result_image));
 
-    uint32_t mincount = 0, maxcount = 0;
+    vx_size mincount = 0, maxcount = 0;
     vx_scalar minval_, maxval_, mincount_, maxcount_;
     vx_array minloc_ = 0, maxloc_ = 0;
     vx_enum sctype = VX_TYPE_INT16;
     minval_ = ct_scalar_from_int(context, sctype, 0);
     maxval_ = ct_scalar_from_int(context, sctype, 0);
-    mincount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
-    maxcount_ = ct_scalar_from_int(context, VX_TYPE_UINT32, 0);
+    mincount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
+    maxcount_ = ct_scalar_from_int(context, VX_TYPE_SIZE, 0);
     minloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, 300);
     maxloc_ = vxCreateArray(context, VX_TYPE_COORDINATES2D, 300);
     VX_CALL(vxuMinMaxLoc(context, vx_result_image, minval_, maxval_,
