@@ -727,6 +727,37 @@ static void own_laplacian_pyramid_openvx(vx_context context, vx_border_t border,
     return;
 }
 
+/* Issue #37: build the graph once, process it, then overwrite the contents of
+   the same input image handle and process the same graph again. This exercises
+   vxProcessGraph twice on one graph so stale outputs that are not refreshed on
+   re-run are detected. On return, 'input' holds 'modified'. */
+static void own_laplacian_pyramid_openvx_rerun(vx_context context, vx_border_t border, vx_image input, CT_Image modified, vx_pyramid laplacian, vx_image output)
+{
+    vx_graph graph = 0;
+    vx_node node = 0;
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    ASSERT_VX_OBJECT(node = vxLaplacianPyramidNode(graph, input, laplacian, output), VX_TYPE_NODE);
+
+    VX_CALL(vxSetNodeAttribute(node, VX_NODE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    /* Replace the input contents (same handle) and re-run the same graph */
+    ASSERT_NO_FAILURE(ct_image_copyto_vx_image(input, modified));
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseNode(&node));
+    VX_CALL(vxReleaseGraph(&graph));
+
+    ASSERT(node == 0);
+    ASSERT(graph == 0);
+
+    return;
+}
+
 typedef struct
 {
     const char* testName;
@@ -790,8 +821,23 @@ TEST_WITH_ARG(LaplacianPyramid, testGraphProcessing, Arg, LAPLACIAN_PYRAMID_PARA
         ASSERT_VX_OBJECT(tst_dst = vxCreateImage(context, next_lev_width, next_lev_height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
     }
 
+    /* Issue #37: run the OpenVX graph, then replace the input contents (same
+       vx_image handle) and re-run the SAME graph to catch stale outputs that
+       are not refreshed across vxProcessGraph re-runs. The reference is computed
+       from the modified input so the comparison stays fair. */
+    ASSERT(input->format == VX_DF_IMAGE_U8); /* helper below assumes single-plane U8 */
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        vx_uint32 x, y;
+
+        for (y = 0; y < input->height; y++)
+            for (x = 0; x < input->width; x++)
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
+
+        own_laplacian_pyramid_openvx_rerun(context, border, src, modified, tst_pyr, tst_dst);
+    }
+    /* src now holds the modified input, so the reference reflects the re-run input */
     own_laplacian_pyramid_reference(context, border, src, ref_pyr, ref_dst);
-    own_laplacian_pyramid_openvx(context, border, src, tst_pyr, tst_dst);
 
     {
         CT_Image ct_ref_dst = 0;
@@ -1073,6 +1119,40 @@ static void own_laplacian_reconstruct_openvx(vx_context context, vx_border_t bor
     return;
 }
 
+/* Issue #37: build the reconstruct graph once, process it, then modify the
+   original source image, rebuild the laplacian pyramid + lowest-res image into
+   the SAME handles that feed the graph, and process the same graph again. This
+   exercises vxProcessGraph twice on one graph so stale outputs are detected.
+   On return, 'laplacian' and 'input' reflect 'modified'. */
+static void own_laplacian_reconstruct_openvx_rerun(vx_context context, vx_border_t border, vx_pyramid laplacian, vx_image input, vx_image output, vx_image src, CT_Image modified)
+{
+    vx_graph graph = 0;
+    vx_node node = 0;
+
+    ASSERT_VX_OBJECT(graph = vxCreateGraph(context), VX_TYPE_GRAPH);
+
+    ASSERT_VX_OBJECT(node = vxLaplacianReconstructNode(graph, laplacian, input, output), VX_TYPE_NODE);
+
+    VX_CALL(vxSetNodeAttribute(node, VX_NODE_BORDER, &border, sizeof(border)));
+
+    VX_CALL(vxVerifyGraph(graph));
+    VX_CALL(vxProcessGraph(graph));
+
+    /* Modify the source and refill the pyramid + lowest-res inputs in place,
+       then re-run the same graph */
+    ASSERT_NO_FAILURE(ct_image_copyto_vx_image(src, modified));
+    own_laplacian_pyramid_reference(context, border, src, laplacian, input);
+    VX_CALL(vxProcessGraph(graph));
+
+    VX_CALL(vxReleaseNode(&node));
+    VX_CALL(vxReleaseGraph(&graph));
+
+    ASSERT(node == 0);
+    ASSERT(graph == 0);
+
+    return;
+}
+
 #define LAPLACIAN_RECONSTRUCT_PARAMETERS \
     CT_GENERATE_PARAMETERS("randomInput", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_OWN_SET, ARG, own_generate_random, NULL), \
     CT_GENERATE_PARAMETERS("lena", ADD_VX_BORDERS_REQUIRE_UNDEFINED_ONLY, ADD_SIZE_NONE, ARG, own_read_image, "lena.bmp")
@@ -1115,9 +1195,26 @@ TEST_WITH_ARG(LaplacianReconstruct, testGraphProcessing, Arg, LAPLACIAN_RECONSTR
         ASSERT_VX_OBJECT(tst_dst = vxCreateImage(context, input->width, input->height, VX_DF_IMAGE_U8), VX_TYPE_IMAGE);
     }
 
+    /* Build the laplacian pyramid + lowest-res image from the (original) input. */
     own_laplacian_pyramid_reference(context, build_border, src, ref_pyr, ref_lowest_res);
+
+    /* Issue #37: run the reconstruct graph, then modify the source, rebuild the
+       pyramid + lowest-res into the SAME handles that feed the graph, and re-run
+       the SAME graph to catch stale outputs across vxProcessGraph re-runs. */
+    ASSERT(input->format == VX_DF_IMAGE_U8); /* helper below assumes single-plane U8 */
+    {
+        CT_Image modified = ct_allocate_image(input->width, input->height, input->format);
+        vx_uint32 x, y;
+
+        for (y = 0; y < input->height; y++)
+            for (x = 0; x < input->width; x++)
+                modified->data.y[y * modified->stride + x] = ~input->data.y[y * input->stride + x];
+
+        own_laplacian_reconstruct_openvx_rerun(context, build_border, ref_pyr, ref_lowest_res, tst_dst, src, modified);
+    }
+    /* ref_pyr/ref_lowest_res now reflect the modified input, so the reference
+       reconstruct matches the re-run output. */
     own_laplacian_reconstruct_reference(context, build_border, ref_pyr, ref_lowest_res, ref_dst);
-    own_laplacian_reconstruct_openvx(context, build_border, ref_pyr, ref_lowest_res, tst_dst);
 
     {
         CT_Image ct_ref_dst = 0;
