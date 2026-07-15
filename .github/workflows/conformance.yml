@@ -71,10 +71,6 @@ jobs:
           cmake --build . -j"$(nproc)"
 
   # Stage 2 -- conformance test matrix covering all modes.
-  #
-  # Most modes use the standard library set (libopenvx + libvxu). NNEF Import
-  # additionally links libnnef-lib.a and stdc++, and needs the NNEF-Tools parser
-  # headers on the include path -- expressed via extra_impl_flags/extra_libraries/extra_c_flags.
   conformance:
     name: Conformance · ${{ matrix.name }}
     needs: build
@@ -99,14 +95,10 @@ jobs:
             impl_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
             filter: ""
-          # Mode 4 -- NNEF Import. Links libnnef-lib.a + stdc++ and needs the
-          # NNEF-Tools parser headers. The NNEF submodule uses std::numeric_limits
-          # without #include <limits>, so force-include it on the impl build.
+          # Mode 4 -- NNEF Import
           - name: NNEF Import
-            impl_flags: "-DOPENVX_CONFORMANCE_NNEF_IMPORT=ON -DCMAKE_CXX_FLAGS=-include limits"
+            impl_flags: "-DOPENVX_CONFORMANCE_NNEF_IMPORT=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_NNEF_IMPORT=ON"
-            extra_libraries: ";$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug/bin/libnnef-lib.a;stdc++"
-            extra_c_flags: "-DCMAKE_C_FLAGS=-I$RUNNER_TEMP/sample-impl/kernels/NNEF-Tools/parser/cpp/include"
             filter: ""
           # Mode 5 -- Combined (Vision, Enhanced, NN, NN16, Import/Export, U1)
           - name: Combined
@@ -171,8 +163,8 @@ jobs:
           cd "$RUNNER_TEMP/build-cts"
           cmake \
             -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
-            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt${{ matrix.extra_libraries }}" \
-            ${{ matrix.cts_flags }} ${{ matrix.extra_c_flags }} "$GITHUB_WORKSPACE"
+            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
+            ${{ matrix.cts_flags }} "$GITHUB_WORKSPACE"
           cmake --build . -j"$(nproc)"
 
       - name: Run conformance
