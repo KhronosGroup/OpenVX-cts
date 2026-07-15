@@ -70,9 +70,7 @@ jobs:
             "$GITHUB_WORKSPACE"
           cmake --build . -j"$(nproc)"
 
-  # Stage 2 -- conformance test matrix. Each mode rebuilds the sample impl with
-  # its feature flags (features are compiled into libopenvx.so) and runs the
-  # matching slice of the suite, mirroring GitLab modes 1-3, 5-7.
+  # Stage 2 -- conformance test matrix covering all modes.
   conformance:
     name: Conformance · ${{ matrix.name }}
     needs: build
@@ -92,11 +90,15 @@ jobs:
             impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON"
             filter: ""
-          # Mode 3 -- Neural Networks (full suite; AlexNet weights + input
-          # images ship in test_conformance/Networks/Binaries and test_data/images).
+          # Mode 3 -- Neural Networks
           - name: Neural Networks
             impl_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON"
+            filter: ""
+          # Mode 4 -- NNEF Import
+          - name: NNEF Import
+            impl_flags: "-DOPENVX_CONFORMANCE_NNEF_IMPORT=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_NNEF_IMPORT=ON"
             filter: ""
           # Mode 5 -- Combined (Vision, Enhanced, NN, NN16, Import/Export, U1)
           - name: Combined
@@ -108,11 +110,26 @@ jobs:
             impl_flags: "-DOPENVX_USE_USER_DATA_OBJECT=ON"
             cts_flags: "-DOPENVX_USE_USER_DATA_OBJECT=ON"
             filter: ""
-          # Mode 7 -- Pipelining (run only the pipeline suite)
+          # Mode 7 -- Pipelining
           - name: Pipelining
             impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON"
             filter: "--filter=GraphPipeline.*"
+          # Mode 8 -- Streaming. Fully implemented in the sample impl.
+          - name: Streaming
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON"
+            filter: "--filter=GraphStreaming.*"
+          # Mode 9 -- Import/Export extension
+          - name: Import/Export
+            impl_flags: "-DOPENVX_USE_IX=ON"
+            cts_flags: "-DOPENVX_USE_IX=ON"
+            filter: "--filter=ExtensionObject.*"
+          # Mode 10 -- U1 binary images
+          - name: U1
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_U1=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_U1=ON"
+            filter: "--filter=vxBinOp1u.*:vxuBinOp1u.*"
     steps:
       - name: Checkout CTS
         uses: actions/checkout@v4
@@ -165,124 +182,3 @@ jobs:
           cd "$RUNNER_TEMP/build-cts"
           LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" \
             ./bin/vx_test_conformance ${{ matrix.filter }}
-
-  # Mode 4 -- NNEF Import. Needs extra include path + links libnnef-lib.a and
-  # stdc++. The sample impl's NNEF submodule uses std::numeric_limits without
-  # including <limits>, so force-include it on the impl build.
-  nnef-import:
-    name: Conformance · NNEF Import
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout CTS
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          lfs: true
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            cmake make git python3 gcc g++
-
-      - name: Configure paths
-        run: |
-          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
-          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
-          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
-
-      - name: Clone sample implementation
-        run: |
-          rm -rf "$SAMPLE_IMPL_DIR"
-          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
-            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
-
-      - name: Build sample implementation (NNEF)
-        run: |
-          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
-          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
-          cmake "$SAMPLE_IMPL_DIR" \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
-            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
-            -DBUILD_X64=1 \
-            -DOPENVX_CONFORMANCE_NNEF_IMPORT=ON \
-            -DCMAKE_CXX_FLAGS="-include limits"
-          make install -j"$(nproc)"
-
-      - name: Build and run CTS (NNEF)
-        run: |
-          rm -rf "$RUNNER_TEMP/build-cts"
-          mkdir -p "$RUNNER_TEMP/build-cts"
-          cd "$RUNNER_TEMP/build-cts"
-          cmake \
-            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
-            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;$OPENVX_DIR/bin/libnnef-lib.a;pthread;dl;m;rt;stdc++" \
-            -DOPENVX_CONFORMANCE_NNEF_IMPORT=ON \
-            -DCMAKE_C_FLAGS="-I$SAMPLE_IMPL_DIR/kernels/NNEF-Tools/parser/cpp/include" \
-            "$GITHUB_WORKSPACE"
-          cmake --build . -j"$(nproc)"
-          LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance
-
-  # Mode 8 -- Streaming. The streaming + event-queue APIs are stubs in the
-  # sample implementation, so this job is allowed to fail and surfaces only as
-  # a warning (mirrors GitLab `allow_failure: true`).
-  streaming:
-    name: Conformance · Streaming (warn-only)
-    needs: build
-    runs-on: ubuntu-22.04
-    continue-on-error: true
-    steps:
-      - name: Checkout CTS
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          lfs: true
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            cmake make git python3 gcc g++
-
-      - name: Configure paths
-        run: |
-          echo "SAMPLE_IMPL_DIR=$RUNNER_TEMP/sample-impl" >> "$GITHUB_ENV"
-          echo "OPENVX_DIR=$RUNNER_TEMP/sample-impl/install/Linux/x64/Debug" >> "$GITHUB_ENV"
-          echo "VX_TEST_DATA_PATH=$GITHUB_WORKSPACE/test_data/" >> "$GITHUB_ENV"
-
-      - name: Clone sample implementation
-        run: |
-          rm -rf "$SAMPLE_IMPL_DIR"
-          git clone --recursive --branch "$SAMPLE_IMPL_REF" \
-            "$SAMPLE_IMPL_REPO" "$SAMPLE_IMPL_DIR"
-
-      - name: Build sample implementation (Streaming)
-        run: |
-          mkdir -p "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
-          cd "$SAMPLE_IMPL_DIR/build/Linux/x64/Debug"
-          cmake "$SAMPLE_IMPL_DIR" \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
-            -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin \
-            -DBUILD_X64=1 \
-            -DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON \
-            -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON
-          make install -j"$(nproc)"
-
-      - name: Build and run CTS (Streaming)
-        run: |
-          rm -rf "$RUNNER_TEMP/build-cts"
-          mkdir -p "$RUNNER_TEMP/build-cts"
-          cd "$RUNNER_TEMP/build-cts"
-          cmake \
-            -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
-            -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
-            -DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON \
-            -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON \
-            "$GITHUB_WORKSPACE"
-          cmake --build . -j"$(nproc)"
-          if ! LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance '--filter=GraphStreaming.*'; then
-            echo "::warning title=Streaming conformance::Streaming/event-queue APIs are stubbed in the sample implementation; failures are expected."
-          fi

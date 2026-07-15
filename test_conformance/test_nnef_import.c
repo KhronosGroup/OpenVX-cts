@@ -520,8 +520,6 @@ void CT_NNEFSetup()
     vx_char nnef_kernel_path[MAXPATHLENGTH];
 
     env = ct_get_test_file_path();
-
-    env = ct_get_test_file_path();
     snprintf(file_path, MAXPATHLENGTH, "%s%s/", env, nnef_folder_name);
 
     file_num = CT_ListFolder(MAX_NNEF_KERNELS, file_path, file_names);
@@ -530,7 +528,7 @@ void CT_NNEFSetup()
     {
         for (i = 0; i < file_num; i++)
         {
-            snprintf(nnef_kernel_path, MAXPATHLENGTH, "%s%s/%s", env, nnef_folder_name, file_names[i]);
+            snprintf(nnef_kernel_path, MAXPATHLENGTH, "%s%s", file_path, file_names[i]);
             memcpy(nnef_kernel_url[i], nnef_kernel_path, sizeof(nnef_kernel_path));
 #if defined(_WIN32)
             strcat(nnef_kernel_path, "*.*");
