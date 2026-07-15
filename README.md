@@ -1,4 +1,8 @@
+<p align="center"><img width="30%" src="https://raw.githubusercontent.com/GPUOpen-ProfessionalCompute-Libraries/MIVisionX/master/docs/data/OpenVX_logo.png" /></p>
+
 # OpenVX 1.3.2 Conformance Test Suite
+
+[![Conformance](https://github.com/KhronosGroup/OpenVX-cts/actions/workflows/conformance.yml/badge.svg?branch=openvx_1.3.2)](https://github.com/KhronosGroup/OpenVX-cts/actions/workflows/conformance.yml)
 
 The OpenVX Conformance Test Suite (CTS) verifies that an OpenVX implementation conforms to the [OpenVX 1.3.2 specification](https://www.khronos.org/registry/OpenVX/). It covers the core API, immediate-mode utility functions, graph-based node functions, and optional KHR extensions.
 
@@ -61,6 +65,13 @@ cmake --build .
 
 When `OPENVX_LIBRARIES` is **not** defined, the CTS build system automatically compiles the Khronos OpenVX sample implementation from source via `cmake/openvx.cmake`. This requires the CTS source tree to be located inside the sample implementation repository as a subdirectory (the default layout when using the `sample-impl` repo, which includes `cts/` as a git submodule).
 
+Clone the sample implementation first:
+
+```bash
+git clone --recursive --branch openvx_1.3.2 \
+    https://github.com/KhronosGroup/OpenVX-sample-impl.git
+```
+
 The expected directory structure is:
 
 ```
@@ -90,21 +101,33 @@ This compiles both the sample implementation (`libopenvx`, `libvxu`, `libopenvx-
 
 ### Option C: Build the Sample Implementation Separately, Then Link
 
-You can also build the sample implementation as a standalone step and then point the CTS at the resulting libraries using Option A:
+You can also build the sample implementation as a standalone step and then point the CTS at the resulting libraries using Option A.
+
+> **Important:** Pass `-DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_LIBDIR=bin` when building the sample implementation. Without these flags, the install step does not set install directories correctly and `libopenvx.so` lands at the install prefix root rather than a `bin/` subdirectory, causing the CTS link step to fail.
 
 ```bash
-# 1. Build the sample implementation
-cd sample-impl
-mkdir build && cd build
-cmake ..
-cmake --build .
+# 1. Clone the sample implementation
+git clone --recursive --branch openvx_1.3.2 \
+    https://github.com/KhronosGroup/OpenVX-sample-impl.git
+export SAMPLE_IMPL_DIR=$(pwd)/OpenVX-sample-impl
+export OPENVX_DIR=$SAMPLE_IMPL_DIR/install
 
-# 2. Build the CTS against the pre-built sample implementation
-cd ../../cts
+# 2. Build and install the sample implementation
+mkdir -p "$SAMPLE_IMPL_DIR/build" && cd "$SAMPLE_IMPL_DIR/build"
+cmake "$SAMPLE_IMPL_DIR" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$OPENVX_DIR" \
+    -DCMAKE_INSTALL_BINDIR=bin \
+    -DCMAKE_INSTALL_LIBDIR=bin \
+    -DBUILD_X64=1
+make install -j"$(nproc)"
+
+# 3. Build the CTS against the installed sample implementation
+cd <path-to-cts>
 mkdir build && cd build
 cmake \
-    -DOPENVX_INCLUDES=<path-to-sample-impl>/include \
-    -DOPENVX_LIBRARIES="<path-to-sample-impl>/build/lib/libopenvx.so;<path-to-sample-impl>/build/lib/libvxu.so;pthread;dl;m;rt" \
+    -DOPENVX_INCLUDES="$OPENVX_DIR/include" \
+    -DOPENVX_LIBRARIES="$OPENVX_DIR/bin/libopenvx.so;$OPENVX_DIR/bin/libvxu.so;pthread;dl;m;rt" \
     ..
 cmake --build .
 ```
@@ -166,7 +189,7 @@ These options select which conformance profiles to compile and test against.
 |---|---|---|
 | `OPENVX_CONFORMANCE_VISION` | `ON` | Vision conformance feature set. |
 | `OPENVX_CONFORMANCE_NEURAL_NETWORKS` | `ON` | Neural Networks conformance feature set. |
-| `OPENVX_CONFORMANCE_NNEF_IMPORT` | `ON` | NNEF Import conformance feature set. |
+| `OPENVX_CONFORMANCE_NNEF_IMPORT` | `ON` | NNEF Import conformance feature set. See note below about extra build requirements. |
 | `OPENVX_USE_ENHANCED_VISION` | `ON` | Enhanced Vision feature set. |
 
 ### KHR Extension Toggles
@@ -189,6 +212,22 @@ These options enable or disable test cases for specific Khronos extensions.
 |---|---|---|
 | `BUILD_TEST_DATA_GENERATORS` | `OFF` | Build the test data generator utilities (in `test_data_generator/`). |
 | `CT_DISABLE_TIME_SUPPORT` | not set | When defined, disables test duration timing support. |
+
+### NNEF Import: Extra Build Requirements
+
+Enabling `OPENVX_CONFORMANCE_NNEF_IMPORT=ON` requires two extra steps beyond the standard CTS build:
+
+1. **Additional include path** — the NNEF parser headers from the sample implementation's submodule must be on the include path:
+   ```bash
+   -DCMAKE_C_FLAGS="-I<sample-impl>/kernels/NNEF-Tools/parser/cpp/include"
+   ```
+
+2. **Additional link libraries** — the NNEF static library and `stdc++` must be added to `OPENVX_LIBRARIES`:
+   ```bash
+   -DOPENVX_LIBRARIES="...;$OPENVX_DIR/bin/libnnef-lib.a;stdc++"
+   ```
+
+   > **Note:** With `-DCMAKE_INSTALL_LIBDIR=bin` (as recommended in Option C), `libnnef-lib.a` installs to `$OPENVX_DIR/bin/`, not `lib/`.
 
 ### Example: Baseline-Only Build
 

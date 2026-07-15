@@ -225,14 +225,12 @@ jobs:
           cmake --build . -j"$(nproc)"
           LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance
 
-  # Mode 8 -- Streaming. The streaming + event-queue APIs are stubs in the
-  # sample implementation, so this job is allowed to fail and surfaces only as
-  # a warning (mirrors GitLab `allow_failure: true`).
+  # Mode 8 -- Streaming. The sample implementation fully implements the
+  # streaming + event-queue APIs, so this job is a required gate.
   streaming:
-    name: Conformance · Streaming (warn-only)
+    name: Conformance · Streaming
     needs: build
     runs-on: ubuntu-22.04
-    continue-on-error: true
     steps:
       - name: Checkout CTS
         uses: actions/checkout@v4
@@ -283,6 +281,4 @@ jobs:
             -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON \
             "$GITHUB_WORKSPACE"
           cmake --build . -j"$(nproc)"
-          if ! LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance '--filter=GraphStreaming.*'; then
-            echo "::warning title=Streaming conformance::Streaming/event-queue APIs are stubbed in the sample implementation; failures are expected."
-          fi
+          LD_LIBRARY_PATH="$OPENVX_DIR/bin:./lib" ./bin/vx_test_conformance '--filter=GraphStreaming.*'
