@@ -372,6 +372,23 @@ The `test_data/` directory contains:
 
 All required test data is included in the CTS package. Regeneration is not necessary in most cases. See `test_data_generator/README` for details on the generator utilities.
 
+## Continuous Integration
+
+The CI runs on every pull request and push to `openvx_1.3.2` via `.github/workflows/conformance.yml`. It builds the [Khronos sample implementation](https://github.com/KhronosGroup/OpenVX-sample-impl) and runs the following conformance modes:
+
+| Mode | Feature flags | Test filter |
+|---|---|---|
+| 1 · Vision | `OPENVX_CONFORMANCE_VISION` | full suite |
+| 2 · Vision + Enhanced Vision | `OPENVX_CONFORMANCE_VISION`, `OPENVX_USE_ENHANCED_VISION` | full suite |
+| 3 · Neural Networks | `OPENVX_CONFORMANCE_NEURAL_NETWORKS` | full suite |
+| 4 · NNEF Import | `OPENVX_CONFORMANCE_NNEF_IMPORT` | full suite |
+| 5 · Combined | `OPENVX_CONFORMANCE_VISION`, `OPENVX_USE_ENHANCED_VISION`, `OPENVX_CONFORMANCE_NEURAL_NETWORKS`, `OPENVX_USE_NN`, `OPENVX_USE_IX`, `OPENVX_USE_U1` | full suite |
+| 6 · User Data Object | `OPENVX_USE_USER_DATA_OBJECT` | full suite |
+| 7 · Pipelining | `OPENVX_CONFORMANCE_VISION`, `OPENVX_USE_ENHANCED_VISION`, `OPENVX_USE_PIPELINING` | `GraphPipeline.*` |
+| 8 · Streaming | `OPENVX_CONFORMANCE_VISION`, `OPENVX_USE_ENHANCED_VISION`, `OPENVX_USE_PIPELINING`, `OPENVX_USE_STREAMING` | `GraphStreaming.*` |
+| 9 · Import/Export | `OPENVX_USE_IX` | `ExtensionObject.*` |
+| 10 · U1 | `OPENVX_CONFORMANCE_VISION`, `OPENVX_USE_U1` | `vxBinOp1u.*:vxuBinOp1u.*` |
+
 ## Directory Structure
 
 ```

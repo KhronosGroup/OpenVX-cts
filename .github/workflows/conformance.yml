@@ -120,6 +120,16 @@ jobs:
             impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON"
             cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_ENHANCED_VISION=ON -DOPENVX_USE_PIPELINING=ON -DOPENVX_USE_STREAMING=ON"
             filter: "--filter=GraphStreaming.*"
+          # Mode 9 -- Import/Export extension
+          - name: Import/Export
+            impl_flags: "-DOPENVX_USE_IX=ON"
+            cts_flags: "-DOPENVX_USE_IX=ON"
+            filter: "--filter=ExtensionObject.*"
+          # Mode 10 -- U1 binary images
+          - name: U1
+            impl_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_U1=ON"
+            cts_flags: "-DOPENVX_CONFORMANCE_VISION=ON -DOPENVX_USE_U1=ON"
+            filter: "--filter=vxBinOp1u.*:vxuBinOp1u.*"
     steps:
       - name: Checkout CTS
         uses: actions/checkout@v4
