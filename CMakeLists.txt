@@ -47,18 +47,20 @@ status_separator()
 message(STATUS "=       Conformance Tests for OpenVX       =")
 status_separator()
 
-# Default options for the CMake GUI
-option( OPENVX_USE_IX ON )
-option( OPENVX_USE_NN ON )
-option( OPENVX_USE_NN_16 ON )
-option( OPENVX_USE_PIPELINING OFF )
-option( OPENVX_USE_STREAMING OFF )
-option( OPENVX_USE_USER_DATA_OBJECT OFF )
-option( OPENVX_USE_U1 ON )
-option( OPENVX_CONFORMANCE_VISION ON )
-option( OPENVX_CONFORMANCE_NEURAL_NETWORKS ON )
-option( OPENVX_CONFORMANCE_NNEF_IMPORT ON)
-option( OPENVX_USE_ENHANCED_VISION ON )
+# Default options for the CMake GUI.
+# Only the base Vision conformance feature set is enabled by default; every other
+# feature set and extension is opt-in and must be turned on explicitly.
+option( OPENVX_CONFORMANCE_VISION          "Vision conformance feature set"          ON  )
+option( OPENVX_CONFORMANCE_NEURAL_NETWORKS "Neural Networks conformance feature set"  OFF )
+option( OPENVX_CONFORMANCE_NNEF_IMPORT     "NNEF Import conformance feature set"      OFF )
+option( OPENVX_USE_ENHANCED_VISION         "Enhanced Vision feature set"              OFF )
+option( OPENVX_USE_IX                      "Import/Export extension (vx_khr_ix)"      OFF )
+option( OPENVX_USE_NN                      "Neural Network extension (vx_khr_nn)"     OFF )
+option( OPENVX_USE_NN_16                   "Neural Network 16-bit extension"          OFF )
+option( OPENVX_USE_U1                      "Binary image (1-bit / U1) feature set"    OFF )
+option( OPENVX_USE_PIPELINING              "Pipelining extension"                     OFF )
+option( OPENVX_USE_STREAMING               "Streaming extension"                      OFF )
+option( OPENVX_USE_USER_DATA_OBJECT        "User Data Object extension"               OFF )
 
 
 message( "-- Selected OpenVX Feature Sets:")

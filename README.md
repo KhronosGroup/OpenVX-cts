@@ -10,36 +10,17 @@ The OpenVX Conformance Test Suite (CTS) verifies that an OpenVX implementation c
 
 - **CMake** 3.10 or later
 - **C99-compatible compiler** (GCC, Clang, or MSVC)
-- **Git LFS** — required to fetch the binary test images in `test_data/` (see [Cloning](#cloning) below)
 - An OpenVX implementation — either a pre-built library or the Khronos sample implementation
+- **Python 3** *(optional)* — only required for the [`run_tests.py`](#batch-test-runner-run_testspy) batch runner
 
 ## Cloning
 
-Since the `openvx_1.3.2` branch, the binary test images in `test_data/` (e.g. `lena.bmp`) are stored using [Git LFS](https://git-lfs.com/). **Install Git LFS before cloning**, otherwise `test_data/` will contain small text pointer files instead of the actual images.
+The binary test images in `test_data/` (e.g. `lena.bmp`) are committed as regular Git objects, so a standard clone fetches everything needed — no Git LFS or other extra steps are required.
 
 ```bash
-# Install Git LFS (once per machine), then enable it for your user
-git lfs install
-
-# Clone as usual — LFS objects are fetched automatically
-git clone <repository-url>
+git clone https://github.com/KhronosGroup/OpenVX-cts.git
+cd OpenVX-cts
 ```
-
-If you already cloned without Git LFS, install it and then pull the real files:
-
-```bash
-git lfs install
-git lfs pull
-```
-
-Without Git LFS the files appear present on disk, but the CTS fails at runtime with errors such as:
-
-```
-FAILED at test_engine/test_image.c:387
-    Can't open image file: lena.bmp
-```
-
-> **Note:** This applies to `openvx_1.3.2` and later. The `openvx_1.3` branch stored test images as regular git blobs and did not require Git LFS.
 
 ## Building
 
@@ -183,25 +164,28 @@ cmake -DCMAKE_BUILD_TYPE=Debug ..
 
 ### Conformance Feature Sets
 
-These options select which conformance profiles to compile and test against.
+These options select which conformance profiles to compile and test against. Only
+the base **Vision** feature set is enabled by default; every other feature set and
+extension is opt-in and must be turned on explicitly.
 
 | Variable | Default | Description |
 |---|---|---|
 | `OPENVX_CONFORMANCE_VISION` | `ON` | Vision conformance feature set. |
-| `OPENVX_CONFORMANCE_NEURAL_NETWORKS` | `ON` | Neural Networks conformance feature set. |
-| `OPENVX_CONFORMANCE_NNEF_IMPORT` | `ON` | NNEF Import conformance feature set. See note below about extra build requirements. |
-| `OPENVX_USE_ENHANCED_VISION` | `ON` | Enhanced Vision feature set. |
+| `OPENVX_CONFORMANCE_NEURAL_NETWORKS` | `OFF` | Neural Networks conformance feature set. |
+| `OPENVX_CONFORMANCE_NNEF_IMPORT` | `OFF` | NNEF Import conformance feature set. |
+| `OPENVX_USE_ENHANCED_VISION` | `OFF` | Enhanced Vision feature set. |
 
 ### KHR Extension Toggles
 
-These options enable or disable test cases for specific Khronos extensions.
+These options enable or disable test cases for specific Khronos extensions. All are
+disabled by default.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENVX_USE_IX` | `ON` | Import/Export extension (`vx_khr_ix`). |
-| `OPENVX_USE_NN` | `ON` | Neural Network extension (`vx_khr_nn`). |
-| `OPENVX_USE_NN_16` | `ON` | Neural Network 16-bit extension. |
-| `OPENVX_USE_U1` | `ON` | Binary image (1-bit / U1) feature set. |
+| `OPENVX_USE_IX` | `OFF` | Import/Export extension (`vx_khr_ix`). |
+| `OPENVX_USE_NN` | `OFF` | Neural Network extension (`vx_khr_nn`). |
+| `OPENVX_USE_NN_16` | `OFF` | Neural Network 16-bit extension. |
+| `OPENVX_USE_U1` | `OFF` | Binary image (1-bit / U1) feature set. |
 | `OPENVX_USE_PIPELINING` | `OFF` | Pipelining extension. |
 | `OPENVX_USE_STREAMING` | `OFF` | Streaming extension. |
 | `OPENVX_USE_USER_DATA_OBJECT` | `OFF` | User Data Object extension. |
@@ -213,36 +197,15 @@ These options enable or disable test cases for specific Khronos extensions.
 | `BUILD_TEST_DATA_GENERATORS` | `OFF` | Build the test data generator utilities (in `test_data_generator/`). |
 | `CT_DISABLE_TIME_SUPPORT` | not set | When defined, disables test duration timing support. |
 
-### NNEF Import: Extra Build Requirements
-
-Enabling `OPENVX_CONFORMANCE_NNEF_IMPORT=ON` requires two extra steps beyond the standard CTS build:
-
-1. **Additional include path** — the NNEF parser headers from the sample implementation's submodule must be on the include path:
-   ```bash
-   -DCMAKE_C_FLAGS="-I<sample-impl>/kernels/NNEF-Tools/parser/cpp/include"
-   ```
-
-2. **Additional link libraries** — the NNEF static library and `stdc++` must be added to `OPENVX_LIBRARIES`:
-   ```bash
-   -DOPENVX_LIBRARIES="...;$OPENVX_DIR/bin/libnnef-lib.a;stdc++"
-   ```
-
-   > **Note:** With `-DCMAKE_INSTALL_LIBDIR=bin` (as recommended in Option C), `libnnef-lib.a` installs to `$OPENVX_DIR/bin/`, not `lib/`.
-
 ### Example: Baseline-Only Build
 
-To compile with no extensions enabled:
+The Vision-only baseline is the default, so no feature flags are needed — every other
+feature set and extension is off unless you enable it:
 
 ```bash
 cmake \
     -DOPENVX_INCLUDES=$OPENVX_DIR/include \
     -DOPENVX_LIBRARIES="$OPENVX_DIR/lib/libopenvx.so;$OPENVX_DIR/lib/libvxu.so;pthread;dl;m;rt" \
-    -DOPENVX_USE_IX=OFF \
-    -DOPENVX_USE_NN=OFF \
-    -DOPENVX_USE_NN_16=OFF \
-    -DOPENVX_USE_U1=OFF \
-    -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=OFF \
-    -DOPENVX_CONFORMANCE_NNEF_IMPORT=OFF \
     ..
 ```
 
@@ -252,6 +215,10 @@ cmake \
 cmake \
     -DOPENVX_INCLUDES=$OPENVX_DIR/include \
     -DOPENVX_LIBRARIES="$OPENVX_DIR/lib/libopenvx.so;$OPENVX_DIR/lib/libvxu.so;pthread;dl;m;rt" \
+    -DOPENVX_CONFORMANCE_VISION=ON \
+    -DOPENVX_CONFORMANCE_NEURAL_NETWORKS=ON \
+    -DOPENVX_CONFORMANCE_NNEF_IMPORT=ON \
+    -DOPENVX_USE_ENHANCED_VISION=ON \
     -DOPENVX_USE_IX=ON \
     -DOPENVX_USE_NN=ON \
     -DOPENVX_USE_NN_16=ON \
@@ -419,4 +386,4 @@ cts/
 
 Copyright (c) 2012-2026 The Khronos Group Inc.
 
-Licensed under the Apache License, Version 2.0. See the [LICENSE](http://www.apache.org/licenses/LICENSE-2.0) for details.
+Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details, or the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0) online.
