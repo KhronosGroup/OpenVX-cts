@@ -15,8 +15,6 @@ The OpenVX Conformance Test Suite (CTS) verifies that an OpenVX implementation c
 
 ## Cloning
 
-The binary test images in `test_data/` (e.g. `lena.bmp`) are committed as regular Git objects, so a standard clone fetches everything needed — no Git LFS or other extra steps are required.
-
 ```bash
 git clone https://github.com/KhronosGroup/OpenVX-cts.git
 cd OpenVX-cts
