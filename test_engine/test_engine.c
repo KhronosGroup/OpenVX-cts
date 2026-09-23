@@ -666,17 +666,28 @@ int CT_main(int argc, char* argv[], const char* version_str)
 #endif
 
     struct CT_TestCaseEntry* testcase = 0;
+    g_firstTestCase = NULL;
+    g_test_filter = NULL;
+    g_has_running_test = 0;
+    g_option_run_disabled_tests = 0;
+    memset(&g_context_internals, 0, sizeof(g_context_internals));
+    memset(&g_context, 0, sizeof(g_context));
+    g_context.internal_ = &g_context_internals;
+#ifdef CT_TEST_TIME
+    g_timeShow =
+#ifdef CT_TIME_SHOW
+        1
+#else
+        0
+#endif
+        ;
+#endif
 
     for (arg = 1; arg < argc; arg++)
     {
         const char* argStr = argv[arg];
         if (memcmp(argStr, "--filter=", 9) == 0)
         {
-            if (g_test_filter)
-            {
-                // TODO add message
-                return 1;
-            }
             g_test_filter = argStr + 9;
         }
         else if (strcmp(argStr, "--verbose") == 0)
@@ -741,7 +752,16 @@ int CT_main(int argc, char* argv[], const char* version_str)
         struct CT_TestCaseEntry** ppLastTestCase = &g_firstTestCase;
         while (g_testcase_register_fns[total_testcases])
         {
-            *ppLastTestCase = g_testcase_register_fns[total_testcases]();
+            struct CT_TestCaseEntry* pTestCase = g_testcase_register_fns[total_testcases]();
+            struct CT_TestCaseEntry* pClearNext = pTestCase;
+            while (pClearNext)
+            {
+                struct CT_TestCaseEntry* pNext = pClearNext->next_;
+                pClearNext->next_ = NULL;
+                pClearNext = pNext;
+            }
+
+            *ppLastTestCase = pTestCase;
             while (*ppLastTestCase)
                 ppLastTestCase = &ppLastTestCase[0]->next_;
             total_testcases++;
@@ -761,7 +781,16 @@ int CT_main(int argc, char* argv[], const char* version_str)
         int test_id = 0;
         for (; testcase->test_register_fns_[test_id]; test_id++)
         {
-            *ppLastTest = testcase->test_register_fns_[test_id]();
+            struct CT_TestEntry* pTestEntry = testcase->test_register_fns_[test_id]();
+            struct CT_TestEntry* pClearNext = pTestEntry;
+            while (pClearNext)
+            {
+                struct CT_TestEntry* pNext = pClearNext->next_;
+                pClearNext->next_ = NULL;
+                pClearNext = pNext;
+            }
+
+            *ppLastTest = pTestEntry;
 
             while (*ppLastTest)
             {
