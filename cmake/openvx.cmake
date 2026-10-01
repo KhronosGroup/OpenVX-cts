@@ -41,12 +41,6 @@ endmacro()
 add_c_flag(-Wno-attributes)
 add_c_flag(-std=gnu99) #sample implementation does use non-ansi extensions
 
-if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
-  foreach(flags CMAKE_C_FLAGS CMAKE_C_FLAGS_RELEASE CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
-    string(REPLACE "-O3" "-O2" ${flags} "${${flags}}")
-  endforeach()
-endif()
-
 # dirty hack to avoid early termination of sample implementation
 add_definitions(-DDEBUG_BREAK=rand)
 

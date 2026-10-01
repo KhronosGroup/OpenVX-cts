@@ -39,6 +39,21 @@ else()
   add_definitions(-DNDEBUG)
 endif()
 
+# Cap optimisation at -O2. Parts of the suite report spurious failures when built
+# at -O3, and a conformance result must not depend on how hard the compiler was
+# asked to optimise the test code. CMake bakes -O3 into the Release flags, so the
+# level is rewritten here, before any target is defined, for every configuration.
+# GCC Failure - https://github.com/ROCm/MIVisionX/issues/1748
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  foreach(flags CMAKE_C_FLAGS
+                CMAKE_C_FLAGS_RELEASE
+                CMAKE_C_FLAGS_RELWITHDEBINFO
+                CMAKE_C_FLAGS_MINSIZEREL
+                CMAKE_C_FLAGS_DEBUG)
+    string(REPLACE "-O3" "-O2" ${flags} "${${flags}}")
+  endforeach()
+endif()
+
 macro(status_separator)
   message(STATUS "============================================")
 endmacro()
